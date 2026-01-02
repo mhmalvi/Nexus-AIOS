@@ -25,6 +25,7 @@ export interface Artifact {
   content: string;
   isVisible: boolean;
   position?: { x: number; y: number };
+  size?: { width: number; height: number };
 }
 
 export interface Message {
@@ -52,10 +53,37 @@ export interface AgentState {
 
 export interface UISettings {
   theme: 'light' | 'dark' | 'system';
+  accentColor: string; 
   fontSize: number;
   sidebarWidth: number;
   animations: boolean;
   showThoughts: boolean;
+}
+
+export interface WindowState {
+  id: string;
+  isOpen: boolean;
+  isMinimized: boolean;
+  isMaximized: boolean;
+  position?: { x: number; y: number };
+  zIndex: number;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  timestamp: Date;
+  read: boolean;
+}
+
+export interface SearchResult {
+  id: string;
+  type: 'window' | 'message' | 'artifact' | 'action';
+  title: string;
+  subtitle?: string;
+  action: () => void;
 }
 
 export interface AppState {
@@ -65,4 +93,7 @@ export interface AppState {
   activeConversation: Message[];
   pendingAction: ActionRequest | null;
   artifacts: Artifact[];
+  windows: Record<string, WindowState>;
+  notifications: Notification[];
+  activeWindowId: string | null;
 }

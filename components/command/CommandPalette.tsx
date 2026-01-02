@@ -13,7 +13,8 @@ import {
   Sun,
   Laptop,
   History,
-  Terminal
+  Terminal,
+  Palette
 } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 
@@ -21,7 +22,8 @@ export function CommandPalette() {
   const { 
     isCommandPaletteOpen, 
     setCommandPaletteOpen, 
-    setTheme, 
+    setTheme,
+    setAccentColor,
     clearThoughts,
     startListening,
     stopListening,
@@ -57,6 +59,14 @@ export function CommandPalette() {
   };
 
   const itemClass = "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-accent aria-selected:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-foreground";
+  
+  const colors = [
+      { name: 'Electric Blue', value: '#007AFF' },
+      { name: 'Neon Purple', value: '#BF5AF2' },
+      { name: 'Cyber Green', value: '#32D74B' },
+      { name: 'Alert Orange', value: '#FF9F0A' },
+      { name: 'Crimson Red', value: '#FF3B30' },
+  ];
 
   return (
     <Command.Dialog
@@ -88,7 +98,7 @@ export function CommandPalette() {
             </Command.Group>
         )}
 
-        <Command.Group heading="Actions" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+        <Command.Group heading="System" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
           <Command.Item onSelect={() => { agent.isListening ? stopListening() : startListening(); setCommandPaletteOpen(false); }} className={itemClass}>
             <Mic className="mr-2 h-4 w-4" />
             <span>{agent.isListening ? 'Stop Listening' : 'Start Listening'}</span>
@@ -97,24 +107,9 @@ export function CommandPalette() {
             <Trash2 className="mr-2 h-4 w-4" />
             <span>Clear Thought Stream</span>
           </Command.Item>
-          <Command.Item className={itemClass}>
-            <Activity className="mr-2 h-4 w-4" />
-            <span>System Status</span>
-          </Command.Item>
         </Command.Group>
 
-        <Command.Group heading="Navigation" className="px-2 py-1.5 text-xs font-medium text-muted-foreground pt-2">
-           <Command.Item className={itemClass}>
-             <Database className="mr-2 h-4 w-4" />
-             <span>Go to Memory Bank</span>
-           </Command.Item>
-           <Command.Item className={itemClass}>
-             <Settings className="mr-2 h-4 w-4" />
-             <span>Settings</span>
-           </Command.Item>
-        </Command.Group>
-
-        <Command.Group heading="Theme" className="px-2 py-1.5 text-xs font-medium text-muted-foreground pt-2">
+        <Command.Group heading="Appearance" className="px-2 py-1.5 text-xs font-medium text-muted-foreground pt-2">
           <Command.Item onSelect={() => setTheme('light')} className={itemClass}>
             <Sun className="mr-2 h-4 w-4" />
             <span>Light Mode</span>
@@ -123,10 +118,19 @@ export function CommandPalette() {
             <Moon className="mr-2 h-4 w-4" />
             <span>Dark Mode</span>
           </Command.Item>
-          <Command.Item onSelect={() => setTheme('system')} className={itemClass}>
+           <Command.Item onSelect={() => setTheme('system')} className={itemClass}>
             <Laptop className="mr-2 h-4 w-4" />
             <span>System</span>
           </Command.Item>
+        </Command.Group>
+
+        <Command.Group heading="Accent Colors" className="px-2 py-1.5 text-xs font-medium text-muted-foreground pt-2">
+           {colors.map(c => (
+               <Command.Item key={c.value} onSelect={() => setAccentColor(c.value)} className={itemClass}>
+                   <div className="mr-2 h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: c.value }} />
+                   <span>{c.name}</span>
+               </Command.Item>
+           ))}
         </Command.Group>
       </Command.List>
       

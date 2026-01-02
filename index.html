@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,48 +16,61 @@
               mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
             },
             colors: {
-              border: "hsl(var(--border))",
-              input: "hsl(var(--input))",
-              ring: "hsl(var(--ring))",
-              background: "hsl(var(--background))",
-              foreground: "hsl(var(--foreground))",
+              background: "rgb(var(--background) / <alpha-value>)",
+              foreground: "rgb(var(--foreground) / <alpha-value>)",
+              border: "rgb(var(--border) / <alpha-value>)",
+              input: "rgb(var(--input) / <alpha-value>)",
+              ring: "rgb(var(--ring) / <alpha-value>)",
               primary: {
-                DEFAULT: "hsl(var(--primary))",
-                foreground: "hsl(var(--primary-foreground))",
+                DEFAULT: "rgb(var(--primary) / <alpha-value>)",
+                foreground: "rgb(var(--primary-foreground) / <alpha-value>)",
               },
               secondary: {
-                DEFAULT: "hsl(var(--secondary))",
-                foreground: "hsl(var(--secondary-foreground))",
+                DEFAULT: "rgb(var(--secondary) / <alpha-value>)",
+                foreground: "rgb(var(--secondary-foreground) / <alpha-value>)",
               },
               destructive: {
-                DEFAULT: "hsl(var(--destructive))",
-                foreground: "hsl(var(--destructive-foreground))",
+                DEFAULT: "rgb(var(--destructive) / <alpha-value>)",
+                foreground: "rgb(var(--destructive-foreground) / <alpha-value>)",
               },
               muted: {
-                DEFAULT: "hsl(var(--muted))",
-                foreground: "hsl(var(--muted-foreground))",
+                DEFAULT: "rgb(var(--muted) / <alpha-value>)",
+                foreground: "rgb(var(--muted-foreground) / <alpha-value>)",
               },
               accent: {
-                DEFAULT: "hsl(var(--accent))",
-                foreground: "hsl(var(--accent-foreground))",
+                DEFAULT: "rgb(var(--accent) / <alpha-value>)",
+                foreground: "rgb(var(--accent-foreground) / <alpha-value>)",
               },
               popover: {
-                DEFAULT: "hsl(var(--popover))",
-                foreground: "hsl(var(--popover-foreground))",
+                DEFAULT: "rgb(var(--popover) / <alpha-value>)",
+                foreground: "rgb(var(--popover-foreground) / <alpha-value>)",
               },
               card: {
-                DEFAULT: "hsl(var(--card))",
-                foreground: "hsl(var(--card-foreground))",
+                DEFAULT: "rgb(var(--card) / <alpha-value>)",
+                foreground: "rgb(var(--card-foreground) / <alpha-value>)",
               },
+              // Nexus Specific Premium Colors
+              nexus: {
+                brain: "#007AFF", // Blue
+                memory: "#BF5AF2", // Purple
+                tool: "#32D74B",  // Green
+                alert: "#FF9F0A", // Orange
+              }
             },
             borderRadius: {
-              lg: "0.5rem",
-              md: "calc(0.5rem - 2px)",
-              sm: "calc(0.5rem - 4px)",
+              lg: "0.75rem",
+              md: "0.5rem",
+              sm: "0.25rem",
             },
-            backgroundImage: {
-              'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-              'nexus-mesh': 'radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%)',
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'float': 'float 6s ease-in-out infinite',
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              }
             }
           },
         },
@@ -67,73 +80,110 @@
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
       :root {
-        --background: 0 0% 100%;
-        --foreground: 240 10% 3.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 240 10% 3.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 240 10% 3.9%;
-        --primary: 240 5.9% 10%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 240 4.8% 95.9%;
-        --secondary-foreground: 240 5.9% 10%;
-        --muted: 240 4.8% 95.9%;
-        --muted-foreground: 240 3.8% 46.1%;
-        --accent: 240 4.8% 95.9%;
-        --accent-foreground: 240 5.9% 10%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 240 5.9% 90%;
-        --input: 240 5.9% 90%;
-        --ring: 240 5.9% 10%;
-        --radius: 0.5rem;
-      }
+        /* Light Mode Defaults - Clean, Apple-like, High Contrast */
+        --background: 245 245 247;
+        --foreground: 29 29 31;
+        
+        --card: 255 255 255;
+        --card-foreground: 29 29 31;
+        
+        --popover: 255 255 255;
+        --popover-foreground: 29 29 31;
+        
+        --primary: 0 122 255;
+        --primary-foreground: 255 255 255;
+        
+        --secondary: 235 235 240;
+        --secondary-foreground: 29 29 31;
+        
+        --muted: 242 242 247;
+        --muted-foreground: 134 134 139;
+        
+        --accent: 255 255 255;
+        --accent-foreground: 29 29 31;
+        
+        --destructive: 255 59 48;
+        --destructive-foreground: 255 255 255;
+        
+        --border: 209 209 214;
+        --input: 209 209 214;
+        --ring: 0 122 255;
+        --radius: 0.75rem;
 
+        --glass-bg: rgba(255, 255, 255, 0.65);
+        --glass-border: rgba(255, 255, 255, 0.4);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+      }
+    
       .dark {
-        --background: 240 10% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 240 10% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 240 10% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 0 0% 98%;
-        --primary-foreground: 240 5.9% 10%;
-        --secondary: 240 3.7% 15.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 240 3.7% 15.9%;
-        --muted-foreground: 240 5% 64.9%;
-        --accent: 240 3.7% 15.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 240 3.7% 15.9%;
-        --input: 240 3.7% 15.9%;
-        --ring: 240 4.9% 83.9%;
+        /* Dark Mode Defaults - Deep Space, Neon Accents */
+        --background: 10 10 12;
+        --foreground: 245 245 247;
+        
+        --card: 28 28 30;
+        --card-foreground: 245 245 247;
+        
+        --popover: 28 28 30;
+        --popover-foreground: 245 245 247;
+        
+        --primary: 10 132 255;
+        --primary-foreground: 255 255 255;
+        
+        --secondary: 44 44 46;
+        --secondary-foreground: 245 245 247;
+        
+        --muted: 28 28 30;
+        --muted-foreground: 161 161 166;
+        
+        --accent: 44 44 46;
+        --accent-foreground: 245 245 247;
+        
+        --destructive: 255 69 58;
+        --destructive-foreground: 255 255 255;
+        
+        --border: 58 58 60;
+        --input: 58 58 60;
+        --ring: 10 132 255;
+
+        --glass-bg: rgba(30, 30, 35, 0.6);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
       }
 
-      /* OS-like Scrollbars */
-      ::-webkit-scrollbar {
-        width: 4px;
-        height: 4px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(155, 155, 155, 0.5);
-        border-radius: 10px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(155, 155, 155, 0.7);
+      /* Aether Glass Utilities */
+      .glass-panel {
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow);
       }
       
+      .glass-panel-hover {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      .glass-panel-hover:hover {
+        background: rgb(var(--card) / 0.8);
+        border-color: rgb(var(--border) / 0.8);
+        box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.2);
+      }
+
       body {
         cursor: default;
         user-select: none;
         -webkit-font-smoothing: antialiased;
         overflow: hidden; 
-        background-color: hsl(var(--background));
-        color: hsl(var(--foreground));
+        background-color: rgb(var(--background));
+        color: rgb(var(--foreground));
+      }
+      
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
       }
     </style>
   <script type="importmap">
@@ -146,12 +196,13 @@
     "lucide-react": "https://esm.sh/lucide-react@0.300.0?deps=react@18.2.0",
     "clsx": "https://esm.sh/clsx@2.1.1",
     "tailwind-merge": "https://esm.sh/tailwind-merge@2.2.0",
-    "cmdk": "https://esm.sh/cmdk@1.0.0?deps=react@18.2.0,react-dom@18.2.0"
+    "cmdk": "https://esm.sh/cmdk@1.0.0?deps=react@18.2.0,react-dom@18.2.0",
+    "framer-motion": "https://esm.sh/framer-motion@10.16.4?deps=react@18.2.0,react-dom@18.2.0"
   }
 }
 </script>
 </head>
   <body>
-    <div id="root" class="h-screen w-screen overflow-hidden bg-background text-foreground"></div>
+    <div id="root" class="h-screen w-screen overflow-hidden bg-background text-foreground transition-colors duration-500"></div>
   </body>
 </html>

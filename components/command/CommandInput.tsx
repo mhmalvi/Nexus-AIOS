@@ -4,7 +4,6 @@ import { Send, Mic, Paperclip, MicOff, Sparkles, Command, Radio, Zap } from "luc
 import { Button } from "../ui/Button";
 import { useStore } from "../../context/StoreContext";
 
-// Type definition for Web Speech API
 declare global {
   interface Window {
     webkitSpeechRecognition: any;
@@ -14,11 +13,10 @@ declare global {
 
 export function CommandInput() {
   const [input, setInput] = useState("");
-  const { addToHistory, addMessage, agent, startListening, stopListening, setTranscript, spawnArtifact } = useStore();
+  const { addToHistory, addMessage, agent, startListening, stopListening, setTranscript, spawnArtifact, openWindow, focusWindow } = useStore();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Mock "Ghost Actions" - Contextual suggestions
   const ghostActions = [
     { label: "Summarize", icon: Sparkles },
     { label: "Deploy to Prod", icon: Zap },
@@ -26,7 +24,6 @@ export function CommandInput() {
   ];
 
   useEffect(() => {
-    // Initialize Speech Recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
@@ -69,7 +66,6 @@ export function CommandInput() {
     }
   }, [agent.isListening, setTranscript, stopListening]);
 
-  // Handle listening state changes
   useEffect(() => {
     if (!recognitionRef.current) return;
     if (agent.isListening) {
@@ -89,6 +85,10 @@ export function CommandInput() {
   const handleSubmit = (text: string = input) => {
     if (!text.trim()) return;
     
+    // ENSURE CHAT WINDOW IS OPEN AND FOCUSED
+    openWindow('chat');
+    focusWindow('chat');
+    
     if (agent.isListening) stopListening();
 
     addMessage({
@@ -100,7 +100,6 @@ export function CommandInput() {
 
     addToHistory(text);
     
-    // Simulating Assistant Response with Artifact Spawning
     setTimeout(() => {
         const artifactId = `art-${Date.now()}`;
         spawnArtifact({
@@ -148,18 +147,19 @@ export function CommandInput() {
         setInput(""); 
         setTranscript("");
         startListening();
+        // Ensure window is open if we start talking
+        openWindow('chat');
     }
   };
 
   return (
     <div className="relative group flex flex-col gap-2">
-        {/* Ghost Actions */}
         <div className="flex gap-2 px-2 overflow-x-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
             {ghostActions.map((action, i) => (
                 <button 
                     key={i}
                     onClick={() => handleSubmit(action.label)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/60 backdrop-blur border border-border shadow-lg text-xs hover:bg-primary hover:text-primary-foreground transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/80 backdrop-blur border border-border shadow-lg text-xs hover:bg-primary hover:text-primary-foreground transition-colors text-foreground"
                 >
                     <action.icon className="w-3 h-3" />
                     {action.label}
@@ -167,7 +167,6 @@ export function CommandInput() {
             ))}
         </div>
 
-        {/* Glow effect */}
         <div className={`absolute bottom-0 left-0 right-0 h-[60px] rounded-xl blur opacity-20 transition duration-500 pointer-events-none ${agent.isListening ? 'bg-red-500 animate-pulse' : 'bg-primary group-hover:opacity-30'}`}></div>
         
         <div className={`relative flex items-end gap-2 bg-background/80 backdrop-blur-2xl border border-border rounded-xl p-2 shadow-2xl transition-all duration-300 ${agent.isListening ? 'ring-1 ring-red-500/50 bg-background/95' : ''}`}>
