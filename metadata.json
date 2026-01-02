@@ -1,0 +1,7 @@
+{
+  "name": "Nexus AIOS",
+  "description": "A futuristic AI Operating System interface featuring real-time thought streams, voice interaction visualization, and human-in-the-loop control mechanisms.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
