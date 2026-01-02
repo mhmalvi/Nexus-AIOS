@@ -40,16 +40,16 @@ export function MainLayout() {
   };
 
   return (
-    <div className="h-screen w-screen relative bg-black overflow-hidden font-sans text-foreground selection:bg-primary/20">
+    <div className="h-screen w-screen relative bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-300">
       {/* 0. GLOBAL DESKTOP BACKGROUND */}
       <div className="absolute inset-0 z-0">
          {/* Animated Aurora Gradient */}
-         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-background to-background opacity-80" />
+         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/40 via-background to-background opacity-80 dark:opacity-80 opacity-40" />
          <div className="absolute bottom-0 right-0 w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[120px] mix-blend-screen pointer-events-none" />
          <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[100px] mix-blend-screen pointer-events-none" />
          
-         {/* Grid overlay */}
-         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_100%)] pointer-events-none" />
+         {/* Grid overlay - Adaptive */}
+         <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.05)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_100%)] pointer-events-none" />
       </div>
 
       <CommandPalette />
@@ -73,7 +73,7 @@ export function MainLayout() {
       {!isRightSidebarOpen && (
           <button 
             onClick={() => setIsRightSidebarOpen(true)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-40 p-1 bg-white/5 hover:bg-white/10 border-l border-t border-b border-white/10 rounded-l-lg backdrop-blur-md transition-all hover:pr-2"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-40 p-1 bg-background/50 hover:bg-background/80 border-l border-t border-b border-border rounded-l-lg backdrop-blur-md transition-all hover:pr-2 shadow-sm"
           >
               <ChevronLeft className="w-4 h-4 text-muted-foreground" />
           </button>
@@ -84,8 +84,8 @@ export function MainLayout() {
         
         {/* VIEW: WAR ROOM (Full Screen App) */}
         {activeView === 'war-room' && (
-            <div className="flex-1 animate-in fade-in zoom-in-95 duration-500 bg-black/40 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="h-8 bg-white/5 border-b border-white/5 flex items-center px-4 gap-2">
+            <div className="flex-1 animate-in fade-in zoom-in-95 duration-500 bg-background/60 backdrop-blur-2xl border border-border rounded-2xl overflow-hidden shadow-2xl">
+                <div className="h-8 bg-muted/20 border-b border-border flex items-center px-4 gap-2">
                     <div className="flex gap-1.5">
                         <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/50" />
                         <div className="w-3 h-3 rounded-full bg-yellow-500/20 border border-yellow-500/50" />
@@ -99,7 +99,7 @@ export function MainLayout() {
 
         {/* VIEW: MEMORY (Full Screen App) */}
         {activeView === 'memory' && (
-            <div className="flex-1 animate-in fade-in zoom-in-95 duration-500 bg-black/40 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="flex-1 animate-in fade-in zoom-in-95 duration-500 bg-background/60 backdrop-blur-2xl border border-border rounded-2xl overflow-hidden shadow-2xl">
                <MemoryViewer />
             </div>
         )}
@@ -109,19 +109,19 @@ export function MainLayout() {
             <>
                 {/* WINDOW 1: COMMUNICATOR (The "Chat") */}
                 <div className="w-[480px] flex flex-col relative z-20 transition-all duration-500 ease-out">
-                    <div className="flex-1 flex flex-col bg-zinc-900/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden ring-1 ring-black/5">
+                    <div className="flex-1 flex flex-col bg-card/60 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden ring-1 ring-border/50">
                         
                         {/* Window Controls */}
-                        <div className="h-10 shrink-0 bg-white/5 border-b border-white/5 flex items-center justify-between px-4 backdrop-blur-md">
+                        <div className="h-10 shrink-0 bg-muted/20 border-b border-border flex items-center justify-between px-4 backdrop-blur-md">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-zinc-300 tracking-wide flex items-center gap-2">
+                                <span className="text-xs font-medium text-muted-foreground tracking-wide flex items-center gap-2">
                                     <Bot className="w-3.5 h-3.5" /> 
                                     Nexus Communicator
                                 </span>
                             </div>
                             <div className="flex gap-2 opacity-50 hover:opacity-100 transition-opacity">
-                                <Minus className="w-3.5 h-3.5 cursor-pointer hover:text-white" />
-                                <Maximize2 className="w-3.5 h-3.5 cursor-pointer hover:text-white" />
+                                <Minus className="w-3.5 h-3.5 cursor-pointer hover:text-foreground" />
+                                <Maximize2 className="w-3.5 h-3.5 cursor-pointer hover:text-foreground" />
                                 <X className="w-3.5 h-3.5 cursor-pointer hover:text-red-400" />
                             </div>
                         </div>
@@ -130,21 +130,21 @@ export function MainLayout() {
                         <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-4 scrollbar-hide">
                             {activeConversation.map((msg) => (
                                 <div key={msg.id} className={`flex gap-3 group ${msg.role === 'user' ? 'flex-row-reverse' : ''} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-lg mt-1 border border-white/5 ${
-                                        msg.role === 'user' ? 'bg-zinc-800' : 'bg-gradient-to-tr from-indigo-600 to-purple-700'
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-lg mt-1 border border-border ${
+                                        msg.role === 'user' ? 'bg-secondary' : 'bg-gradient-to-tr from-indigo-600 to-purple-700'
                                     }`}>
-                                        {msg.role === 'user' ? <User className="w-4 h-4 text-zinc-400" /> : <Bot className="w-4 h-4 text-white" />}
+                                        {msg.role === 'user' ? <User className="w-4 h-4 text-muted-foreground" /> : <Bot className="w-4 h-4 text-white" />}
                                     </div>
                                     
                                     <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                                         <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm backdrop-blur-md border ${
                                             msg.role === 'user' 
-                                            ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-100 rounded-tr-sm' 
-                                            : 'bg-white/5 border-white/10 text-foreground rounded-tl-sm'
+                                            ? 'bg-secondary/80 border-border text-foreground rounded-tr-sm' 
+                                            : 'bg-muted/50 border-border text-foreground rounded-tl-sm'
                                         }`}>
                                             <div className="whitespace-pre-wrap">{msg.content}</div>
                                             {msg.role === 'assistant' && msg.tool && (
-                                                <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2 text-[10px] text-zinc-500">
+                                                <div className="mt-2 pt-2 border-t border-border/50 flex items-center gap-2 text-[10px] text-muted-foreground">
                                                     {getToolIcon(msg.tool)}
                                                     <span className="uppercase tracking-wider">{msg.tool} output</span>
                                                 </div>
@@ -157,7 +157,7 @@ export function MainLayout() {
                         </div>
 
                         {/* Input Area */}
-                        <div className="p-4 bg-gradient-to-t from-black/40 to-transparent">
+                        <div className="p-4 bg-gradient-to-t from-background/40 to-transparent">
                             <CommandInput />
                         </div>
                     </div>
@@ -166,16 +166,16 @@ export function MainLayout() {
                 {/* WINDOW 2: THE WORKSPACE (Artifacts) */}
                 <div className="flex-1 relative z-10">
                     {artifacts.length === 0 ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/10 pointer-events-none select-none">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/20 pointer-events-none select-none">
                             <Layout className="w-32 h-32 mb-6 stroke-[0.5]" />
-                            <h1 className="text-4xl font-extralight tracking-[0.2em] uppercase">Desktop</h1>
+                            <h1 className="text-4xl font-extralight tracking-[0.2em] uppercase text-muted-foreground/40">Desktop</h1>
                             <p className="mt-2 text-sm font-light tracking-widest opacity-50">System Ready . Waiting for Tasks</p>
                         </div>
                     ) : (
                         artifacts.map((artifact, i) => (
                             <div 
                                 key={artifact.id}
-                                className="absolute bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500 slide-in-from-bottom-10 ring-1 ring-white/5"
+                                className="absolute bg-card/80 backdrop-blur-2xl border border-border rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500 slide-in-from-bottom-10 ring-1 ring-border"
                                 style={{
                                     top: `${5 + (i * 3)}%`,
                                     left: `${5 + (i * 3)}%`,
@@ -185,8 +185,8 @@ export function MainLayout() {
                                 }}
                             >
                                 {/* Window Header */}
-                                <div className="h-9 bg-white/5 border-b border-white/5 flex items-center justify-between px-3 cursor-move">
-                                    <div className="flex items-center gap-2 text-xs font-medium text-zinc-300">
+                                <div className="h-9 bg-muted/20 border-b border-border flex items-center justify-between px-3 cursor-move">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-foreground">
                                         <div className="flex gap-1.5 mr-2">
                                             <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 hover:bg-red-500 transition-colors border border-red-500/30" onClick={() => closeArtifact(artifact.id)} />
                                             <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 hover:bg-yellow-500 transition-colors border border-yellow-500/30" />
@@ -197,13 +197,13 @@ export function MainLayout() {
                                     </div>
                                 </div>
                                 {/* Content */}
-                                <div className="h-full bg-black/40 overflow-auto pb-10">
+                                <div className="h-full bg-card/40 overflow-auto pb-10">
                                     {artifact.type === 'code' ? (
-                                        <pre className="p-6 text-xs font-mono text-blue-100 leading-relaxed">
+                                        <pre className="p-6 text-xs font-mono text-foreground leading-relaxed">
                                             {artifact.content}
                                         </pre>
                                     ) : (
-                                        <div className="p-6 text-sm text-zinc-300">{artifact.content}</div>
+                                        <div className="p-6 text-sm text-foreground">{artifact.content}</div>
                                     )}
                                 </div>
                             </div>
@@ -215,10 +215,10 @@ export function MainLayout() {
 
         {/* RIGHT SIDEBAR: THOUGHT STREAM (Floating Drawer) */}
         <div className={`relative transition-all duration-500 ease-spring ${isRightSidebarOpen ? 'w-80 opacity-100 translate-x-0' : 'w-0 opacity-0 translate-x-10 overflow-hidden'}`}>
-             <div className="h-full flex flex-col bg-zinc-900/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden ring-1 ring-black/5">
-                <div className="h-10 bg-white/5 border-b border-white/5 flex items-center justify-between px-3">
-                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Kernel Activity</span>
-                    <button onClick={() => setIsRightSidebarOpen(false)} className="hover:text-white text-zinc-500">
+             <div className="h-full flex flex-col bg-card/60 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden ring-1 ring-border/50">
+                <div className="h-10 bg-muted/20 border-b border-border flex items-center justify-between px-3">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Kernel Activity</span>
+                    <button onClick={() => setIsRightSidebarOpen(false)} className="hover:text-foreground text-muted-foreground">
                         <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>

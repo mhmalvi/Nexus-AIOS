@@ -67,6 +67,29 @@
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
       :root {
+        --background: 0 0% 100%;
+        --foreground: 240 10% 3.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 10% 3.9%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 10% 3.9%;
+        --primary: 240 5.9% 10%;
+        --primary-foreground: 0 0% 98%;
+        --secondary: 240 4.8% 95.9%;
+        --secondary-foreground: 240 5.9% 10%;
+        --muted: 240 4.8% 95.9%;
+        --muted-foreground: 240 3.8% 46.1%;
+        --accent: 240 4.8% 95.9%;
+        --accent-foreground: 240 5.9% 10%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 5.9% 90%;
+        --input: 240 5.9% 90%;
+        --ring: 240 5.9% 10%;
+        --radius: 0.5rem;
+      }
+
+      .dark {
         --background: 240 10% 3.9%;
         --foreground: 0 0% 98%;
         --card: 240 10% 3.9%;
@@ -86,7 +109,6 @@
         --border: 240 3.7% 15.9%;
         --input: 240 3.7% 15.9%;
         --ring: 240 4.9% 83.9%;
-        --radius: 0.5rem;
       }
 
       /* OS-like Scrollbars */
@@ -98,11 +120,11 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(155, 155, 155, 0.5);
         border-radius: 10px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.2);
+        background: rgba(155, 155, 155, 0.7);
       }
       
       body {
@@ -110,11 +132,8 @@
         user-select: none;
         -webkit-font-smoothing: antialiased;
         overflow: hidden; 
-        background-color: #000;
-        background-image: 
-          radial-gradient(circle at 15% 50%, rgba(76, 29, 149, 0.15), transparent 25%), 
-          radial-gradient(circle at 85% 30%, rgba(56, 189, 248, 0.10), transparent 25%);
-        color: #fff;
+        background-color: hsl(var(--background));
+        color: hsl(var(--foreground));
       }
     </style>
   <script type="importmap">
@@ -133,6 +152,6 @@
 </script>
 </head>
   <body>
-    <div id="root" class="h-screen w-screen overflow-hidden"></div>
+    <div id="root" class="h-screen w-screen overflow-hidden bg-background text-foreground"></div>
   </body>
 </html>

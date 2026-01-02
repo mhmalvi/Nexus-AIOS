@@ -159,7 +159,7 @@ export function CommandInput() {
                 <button 
                     key={i}
                     onClick={() => handleSubmit(action.label)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/60 backdrop-blur border border-white/5 shadow-lg text-xs hover:bg-primary hover:text-white transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/60 backdrop-blur border border-border shadow-lg text-xs hover:bg-primary hover:text-primary-foreground transition-colors"
                 >
                     <action.icon className="w-3 h-3" />
                     {action.label}
@@ -168,9 +168,9 @@ export function CommandInput() {
         </div>
 
         {/* Glow effect */}
-        <div className={`absolute bottom-0 left-0 right-0 h-[60px] rounded-xl blur opacity-20 transition duration-500 pointer-events-none ${agent.isListening ? 'bg-red-500 animate-pulse' : 'bg-white group-hover:opacity-30'}`}></div>
+        <div className={`absolute bottom-0 left-0 right-0 h-[60px] rounded-xl blur opacity-20 transition duration-500 pointer-events-none ${agent.isListening ? 'bg-red-500 animate-pulse' : 'bg-primary group-hover:opacity-30'}`}></div>
         
-        <div className={`relative flex items-end gap-2 bg-background/80 backdrop-blur-2xl border border-white/10 rounded-xl p-2 shadow-2xl transition-all duration-300 ${agent.isListening ? 'ring-1 ring-red-500/50 bg-background/95' : ''}`}>
+        <div className={`relative flex items-end gap-2 bg-background/80 backdrop-blur-2xl border border-border rounded-xl p-2 shadow-2xl transition-all duration-300 ${agent.isListening ? 'ring-1 ring-red-500/50 bg-background/95' : ''}`}>
             <div className="flex flex-col items-center justify-end h-full py-1 pl-2">
                  {agent.isListening ? <Radio className="w-4 h-4 text-red-500 animate-pulse" /> : <Command className="w-4 h-4 text-muted-foreground/50" />}
             </div>
@@ -181,7 +181,7 @@ export function CommandInput() {
                 onChange={handleInput}
                 onKeyDown={handleKeyDown}
                 placeholder={agent.isListening ? "Listening..." : "Ask Nexus..."}
-                className="flex-1 max-h-[120px] min-h-[40px] bg-transparent border-none resize-none py-2.5 px-2 focus:outline-none text-sm placeholder:text-muted-foreground/50 font-sans leading-relaxed transition-all"
+                className="flex-1 max-h-[120px] min-h-[40px] bg-transparent border-none resize-none py-2.5 px-2 focus:outline-none text-sm placeholder:text-muted-foreground/50 font-sans leading-relaxed transition-all text-foreground"
                 rows={1}
             />
             
@@ -193,7 +193,7 @@ export function CommandInput() {
                     className={`h-8 w-8 rounded-lg transition-all duration-300 ${
                         agent.isListening 
                         ? 'text-red-500 bg-red-500/10 hover:bg-red-500/20 shadow-inner' 
-                        : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
                 >
                     {agent.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -203,7 +203,7 @@ export function CommandInput() {
                     onClick={() => handleSubmit()} 
                     disabled={!input && !agent.transcript}
                     size="icon"
-                    className="h-8 w-8 rounded-lg bg-white text-black hover:bg-white/90 disabled:opacity-50 disabled:bg-muted"
+                    className="h-8 w-8 rounded-lg bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 disabled:bg-muted"
                 >
                     {(input || agent.transcript) ? <Send className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
                 </Button>

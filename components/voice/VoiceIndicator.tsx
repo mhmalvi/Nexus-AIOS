@@ -38,7 +38,7 @@ export function VoiceIndicator({
       {/* Transcript HUD - Sleek Glass */}
       {transcript && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="bg-background/40 backdrop-blur-3xl border border-white/10 rounded-2xl px-6 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.12)] max-w-md text-center">
+            <div className="bg-background/60 backdrop-blur-3xl border border-border rounded-2xl px-6 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.12)] max-w-md text-center">
                 <p className="text-lg font-light leading-relaxed font-sans text-foreground/90">
                     "{transcript}"
                     <span className="inline-block w-1.5 h-4 bg-primary ml-1 align-middle animate-pulse rounded-full opacity-70"></span>
@@ -49,7 +49,7 @@ export function VoiceIndicator({
 
       {/* Visualizer Dock */}
       <div className="animate-in zoom-in-95 duration-500 origin-bottom">
-        <div className="flex items-center gap-4 px-5 py-3 rounded-full bg-black/80 backdrop-blur-2xl border border-white/10 shadow-[0_0_40px_-10px_rgba(var(--primary),0.3)]">
+        <div className="flex items-center gap-4 px-5 py-3 rounded-full bg-background/90 backdrop-blur-2xl border border-border shadow-[0_0_40px_-10px_rgba(var(--primary),0.3)]">
           
           <div className="relative flex items-center justify-center">
             <div className="absolute inset-0 bg-red-500/20 rounded-full animate-ping opacity-20" />
@@ -68,7 +68,7 @@ export function VoiceIndicator({
                   return (
                     <div
                       key={i}
-                      className="w-1 bg-white/80 rounded-full transition-all duration-[50ms] ease-out"
+                      className="w-1 bg-foreground/80 rounded-full transition-all duration-[50ms] ease-out"
                       style={{
                         height: `${height}px`,
                         opacity: 0.3 + (height / 40) * 0.7
@@ -78,9 +78,9 @@ export function VoiceIndicator({
                })}
           </div>
           
-          <div className="pl-2 border-l border-white/10 flex flex-col">
-               <span className="text-[9px] font-bold text-white/70 uppercase tracking-widest leading-none">Live Input</span>
-               <span className="text-[9px] text-white/40 leading-tight">Listening...</span>
+          <div className="pl-2 border-l border-border flex flex-col">
+               <span className="text-[9px] font-bold text-foreground/70 uppercase tracking-widest leading-none">Live Input</span>
+               <span className="text-[9px] text-muted-foreground leading-tight">Listening...</span>
           </div>
 
         </div>

@@ -7,7 +7,7 @@ export function StatusBar() {
   const { agent } = useStore();
 
   return (
-    <div className="h-9 border-t bg-black/40 backdrop-blur-md flex items-center justify-between px-4 text-[10px] select-none text-muted-foreground z-30 relative">
+    <div className="h-9 border-t border-border bg-background/60 backdrop-blur-md flex items-center justify-between px-4 text-[10px] select-none text-muted-foreground z-30 relative transition-colors duration-300">
       <div className="flex items-center gap-4">
         {/* Nexus Orb */}
         <div className="relative group cursor-pointer">
@@ -15,13 +15,13 @@ export function StatusBar() {
             <div className={`absolute inset-0 rounded-full animate-ping opacity-20 ${agent.isThinking ? 'bg-purple-500' : 'bg-blue-500'}`} />
         </div>
         
-        <span className="font-mono tracking-widest text-zinc-500">NEXUS_KERNEL_V2.4</span>
+        <span className="font-mono tracking-widest text-muted-foreground">NEXUS_KERNEL_V2.4</span>
         
-        <div className="h-3 w-px bg-white/10" />
+        <div className="h-3 w-px bg-border" />
         
         <div className="flex items-center gap-1.5">
           <ShieldCheck className="w-3 h-3 text-green-500/80" />
-          <span className="text-zinc-400">SECURE</span>
+          <span className="text-muted-foreground">SECURE</span>
         </div>
       </div>
 
@@ -29,17 +29,17 @@ export function StatusBar() {
         {agent.isThinking && (
             <div className="flex items-center gap-2 px-3 py-1 bg-purple-500/10 border border-purple-500/20 rounded-full">
                 <Cpu className="w-3 h-3 text-purple-400 animate-spin-slow" />
-                <span className="text-purple-300">PROCESSING CONTEXT...</span>
+                <span className="text-purple-400">PROCESSING CONTEXT...</span>
             </div>
         )}
       </div>
 
       <div className="flex items-center gap-4">
-         <div className="flex items-center gap-1.5 hover:text-white transition-colors cursor-help">
+         <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-help">
             <Activity className="w-3 h-3" />
             <span>Mem: 450MB</span>
          </div>
-         <div className="flex items-center gap-1.5 hover:text-white transition-colors cursor-help">
+         <div className="flex items-center gap-1.5 hover:text-foreground transition-colors cursor-help">
             <HardDrive className="w-3 h-3" />
             <span>Disk: 82%</span>
          </div>
