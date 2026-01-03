@@ -30,7 +30,7 @@ export function Dock() {
   if (ui.focusMode) return null;
 
   return (
-    <div className="fixed bottom-12 left-0 right-0 z-[90] flex justify-center pointer-events-none">
+    <div className="fixed bottom-10 left-0 right-0 z-[90] flex justify-center pointer-events-none">
         {/* Floating Dock Container - Constrained Width */}
         <div className="pointer-events-auto bg-background/80 dark:bg-black/60 backdrop-blur-3xl px-3 py-2.5 rounded-2xl flex items-center gap-2 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.3)] border border-white/20 dark:border-white/10 ring-1 ring-black/5 dark:ring-white/5 transition-all duration-500 ease-out hover:scale-[1.01] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] relative">
             

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification } from '../types';
+import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Agent } from '../types';
 
 interface StoreContextType extends AppState {
   setTheme: (theme: AppState['ui']['theme']) => void;
@@ -31,6 +31,7 @@ interface StoreContextType extends AppState {
   addNotification: (notification: Omit<Notification, 'id' | 'read' | 'timestamp'>) => void;
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
+  updateAgentStatus: (id: string, updates: Partial<Agent>) => void;
   thoughtStream: ThoughtEvent[];
   isCommandPaletteOpen: boolean;
   isGhostBarOpen: boolean;
@@ -68,6 +69,12 @@ const initialState: AppState = {
     currentThought: '',
     recentActions: []
   },
+  swarm: [
+      { id: 'manager', role: 'Manager', name: 'Orchestrator', status: 'idle', currentTask: 'Monitoring system bus', confidence: 100, avatar: 'Brain' },
+      { id: 'sec-ops', role: 'SecOps', name: 'Sentinel', status: 'idle', currentTask: 'Packet inspection (eBPF)', confidence: 98, avatar: 'Shield' },
+      { id: 'dev-arch', role: 'DevArch', name: 'Builder', status: 'idle', currentTask: 'Awaiting spec', confidence: 0, avatar: 'Code' },
+      { id: 'analyst', role: 'Analyst', name: 'Insight', status: 'idle', currentTask: 'Indexing context', confidence: 85, avatar: 'BarChart' },
+  ],
   ui: {
     theme: getInitialTheme(),
     accentColor: getInitialAccent(),
@@ -82,7 +89,7 @@ const initialState: AppState = {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Nexus AIOS Kernel v3.0 initialized. Aether Glass Environment ready.',
+      content: 'Nexus AIOS Kernel v3.1 initialized. Swarm Cluster active.',
       timestamp: new Date(),
       tool: 'terminal'
     }
@@ -124,7 +131,8 @@ type Action =
   | { type: 'WINDOW_SNAP'; payload: { id: string, snap: WindowState['snap'] } }
   | { type: 'ADD_NOTIFICATION'; payload: Notification }
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }
-  | { type: 'CLEAR_NOTIFICATIONS' };
+  | { type: 'CLEAR_NOTIFICATIONS' }
+  | { type: 'UPDATE_AGENT'; payload: { id: string, updates: Partial<Agent> } };
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
@@ -236,6 +244,13 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
         return { ...state, notifications: state.notifications.map(n => n.id === action.payload ? { ...n, read: true } : n) };
     case 'CLEAR_NOTIFICATIONS':
         return { ...state, notifications: [] };
+    case 'UPDATE_AGENT':
+        return {
+            ...state,
+            swarm: state.swarm.map(agent => 
+                agent.id === action.payload.id ? { ...agent, ...action.payload.updates } : agent
+            )
+        };
     default:
       return state;
   }
@@ -315,6 +330,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     }),
     markNotificationRead: (id: string) => dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id }),
     clearNotifications: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
+    updateAgentStatus: (id: string, updates: Partial<Agent>) => dispatch({ type: 'UPDATE_AGENT', payload: { id, updates } }),
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

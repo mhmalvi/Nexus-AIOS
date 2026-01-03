@@ -13,8 +13,8 @@ function App() {
     pendingAction, 
     setPendingAction,
     addMessage,
-    startListening,
-    stopListening
+    updateAgentStatus,
+    addNotification
   } = useStore();
 
   useEffect(() => {
@@ -27,11 +27,21 @@ function App() {
       setPendingAction(action);
     });
 
+    const unsubAgents = mockTauri.subscribeAgentUpdate((payload) => {
+        updateAgentStatus(payload.id, payload.updates);
+    });
+
+    const unsubNotify = mockTauri.subscribeNotification((notification) => {
+        addNotification(notification);
+    });
+
     return () => {
       unsubThoughts();
       unsubHIL();
+      unsubAgents();
+      unsubNotify();
     };
-  }, [addThought, setPendingAction]);
+  }, [addThought, setPendingAction, updateAgentStatus, addNotification]);
 
   const handleApproveAction = (action: any) => {
     setPendingAction(null);

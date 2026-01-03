@@ -1,7 +1,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bell, X, Info, AlertTriangle, CheckCircle, AlertOctagon, Trash2 } from "lucide-react";
+import { Bell, X, Info, AlertTriangle, CheckCircle, AlertOctagon, Trash2, Sparkles, Lightbulb } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 
 interface NotificationCenterProps {
@@ -17,6 +17,7 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
             case 'success': return <CheckCircle className="w-4 h-4 text-green-500" />;
             case 'warning': return <AlertTriangle className="w-4 h-4 text-orange-500" />;
             case 'error': return <AlertOctagon className="w-4 h-4 text-red-500" />;
+            case 'insight': return <Lightbulb className="w-4 h-4 text-purple-500" />;
             default: return <Info className="w-4 h-4 text-blue-500" />;
         }
     };
@@ -79,8 +80,15 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
                                         onClick={() => markNotificationRead(n.id)}
                                         className={`p-3 rounded-lg border flex gap-3 cursor-pointer transition-colors relative overflow-hidden group
                                             ${n.read ? 'bg-card/50 border-border opacity-70' : 'bg-card border-border/80 shadow-sm'}
+                                            ${n.type === 'insight' ? 'bg-purple-500/5 border-purple-500/20' : ''}
                                         `}
                                     >
+                                        {n.type === 'insight' && (
+                                            <div className="absolute top-0 right-0 p-1 bg-purple-500 text-white rounded-bl-lg">
+                                                <Sparkles className="w-2 h-2" />
+                                            </div>
+                                        )}
+
                                         <div className="mt-0.5">{getIcon(n.type)}</div>
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start">

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Header } from "./Header";
 import { StatusBar } from "./StatusBar";
 import { Dock } from "./Dock";
@@ -9,23 +9,22 @@ import { CommandPalette } from "../command/CommandPalette";
 import { GhostCommandBar } from "../command/GhostCommandBar";
 import { MemoryViewer } from "../agent/MemoryViewer";
 import { WarRoom } from "../agent/WarRoom";
+import { SwarmCluster } from "../agent/SwarmCluster";
 import { NotificationCenter } from "./NotificationCenter";
 import { SummaryOverlay } from "./SummaryOverlay";
 import { useStore } from "../../context/StoreContext";
 import { User, Bot, Terminal, Code, Globe, Search, Maximize2, Minimize2, X, Minus, Layout, ChevronRight, ChevronLeft, Layers, Settings, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowState, onClose, onMinimize, onMaximize, onFocus, onSnap, activeWindowId, focusMode }: any) => {
+const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowState, onClose, onMinimize, onMaximize, onFocus, onSnap, activeWindowId, focusMode, constraintsRef }: any) => {
     if (!windowState || !windowState.isOpen) return null;
     if (focusMode && activeWindowId !== id) return null;
 
-    const TOP_OFFSET = 55;
+    // Adjusted TOP_OFFSET for 36px header + buffer
+    const TOP_OFFSET = 42;
     
     const initialX = id === 'chat' ? 80 : 250;
     const initialY = id === 'chat' ? 80 : 100;
-
-    // Use percentage based height to ensure it relates to the absolute main container
-    const safeMaxHeight = `calc(100% - ${TOP_OFFSET}px)`;
 
     let targetAnim: any = {
         opacity: windowState.isMinimized ? 0 : 1,
@@ -63,14 +62,9 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
             animate={targetAnim}
             exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
             drag={!windowState.isMaximized && !windowState.snap && !focusMode}
+            dragConstraints={constraintsRef}
             dragMomentum={false}
-            dragElastic={0.1}
-            dragConstraints={{ 
-                left: 0, 
-                top: TOP_OFFSET, 
-                right: window.innerWidth - 50, 
-                bottom: window.innerHeight // Allow dragging fully to bottom
-            }}
+            dragElastic={0.05}
             onDragEnd={handleDragEnd}
             transition={{
                 layout: { type: "spring", stiffness: 350, damping: 30 },
@@ -87,7 +81,6 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
                 top: (!windowState.snap && !windowState.isMaximized && !focusMode) ? initialY : undefined,
                 width: (!windowState.snap && !windowState.isMaximized && !focusMode) ? width : undefined,
                 height: (!windowState.snap && !windowState.isMaximized && !focusMode) ? height : undefined,
-                maxHeight: (!windowState.snap && !windowState.isMaximized && !focusMode) ? safeMaxHeight : undefined,
                 pointerEvents: windowState.isMinimized ? 'none' : 'auto',
             }}
             onMouseDown={() => onFocus(id)}
@@ -131,6 +124,7 @@ export function MainLayout() {
   } = useStore();
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const constraintsRef = React.useRef(null);
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -192,7 +186,7 @@ export function MainLayout() {
       />
 
       {/* Main Desktop Area */}
-      <main className="absolute top-0 bottom-0 left-0 right-0 z-10">
+      <main className="absolute top-0 bottom-0 left-0 right-0 z-10" ref={constraintsRef}>
         
         <div className="relative w-full h-full">
             {/* Ambient Artifacts (Canvas Mode) */}
@@ -201,6 +195,7 @@ export function MainLayout() {
                     <motion.div 
                         key={artifact.id}
                         drag={!ui.focusMode}
+                        dragConstraints={constraintsRef}
                         dragMomentum={false}
                         whileDrag={{ scale: 1.05, cursor: 'grabbing', zIndex: 100 }}
                         initial={{ opacity: 0, scale: 0.8, y: 50, rotateX: 20 }}
@@ -240,7 +235,7 @@ export function MainLayout() {
             </AnimatePresence>
 
             {/* Windows */}
-            <WindowFrame id="chat" title="Nexus Communicator" icon={Bot} width="450px" height="600px" windowState={windows['chat']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+            <WindowFrame constraintsRef={constraintsRef} id="chat" title="Nexus Communicator" icon={Bot} width="450px" height="600px" windowState={windows['chat']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                  <div className="flex flex-col h-full">
                     <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-4 scrollbar-hide">
                         {activeConversation.map((msg) => (
@@ -280,41 +275,19 @@ export function MainLayout() {
                  </div>
             </WindowFrame>
 
-            <WindowFrame id="war-room" title="Mission Control" icon={Layout} width="900px" height="650px" windowState={windows['war-room']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+            <WindowFrame constraintsRef={constraintsRef} id="war-room" title="Mission Control" icon={Layout} width="900px" height="650px" windowState={windows['war-room']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                 <WarRoom />
             </WindowFrame>
 
-            <WindowFrame id="memory" title="Memory Core" icon={Layers} width="900px" height="650px" windowState={windows['memory']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+            <WindowFrame constraintsRef={constraintsRef} id="memory" title="Memory Core" icon={Layers} width="900px" height="650px" windowState={windows['memory']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                 <MemoryViewer />
             </WindowFrame>
 
-             <WindowFrame id="agents" title="Swarm Cluster" icon={Users} width="700px" height="500px" windowState={windows['agents']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                    <div className="grid grid-cols-2 gap-4 p-6 w-full h-full overflow-y-auto">
-                        {['Scheduler', 'Researcher', 'Coder', 'Reviewer'].map((role, i) => (
-                            <div key={i} className="bg-card/50 p-4 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer group hover:shadow-lg">
-                                <div className="flex items-center gap-3 mb-3">
-                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <Bot className="w-5 h-5 text-primary" />
-                                    </div>
-                                    <div>
-                                        <div className="font-bold text-foreground">Agent-{role}</div>
-                                        <div className="text-xs text-green-500 flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                            Active
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded h-20 overflow-hidden font-mono">
-                                    > Waiting for task assignment...
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+             <WindowFrame constraintsRef={constraintsRef} id="agents" title="Swarm Cluster" icon={Users} width="800px" height="600px" windowState={windows['agents']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                <SwarmCluster />
             </WindowFrame>
             
-             <WindowFrame id="settings" title="System Preferences" icon={Settings} width="600px" height="650px" windowState={windows['settings']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+             <WindowFrame constraintsRef={constraintsRef} id="settings" title="System Preferences" icon={Settings} width="600px" height="650px" windowState={windows['settings']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                 <div className="p-6 space-y-8 h-full overflow-y-auto">
                     <section>
                         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Appearance</h3>
@@ -323,7 +296,6 @@ export function MainLayout() {
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm font-medium text-foreground">Interface Theme</span>
                                     <div className="flex gap-2">
-                                        {/* Theme controls handled in Header now */}
                                         <span className="text-xs text-muted-foreground">Managed via Command Deck</span>
                                     </div>
                                 </div>
@@ -351,7 +323,7 @@ export function MainLayout() {
       </main>
 
       {/* Right Sidebar (Thought Stream) - Hidden in Focus Mode */}
-      <div className={`fixed right-0 top-[48px] bottom-0 transition-all duration-500 z-[40] ${isRightSidebarOpen && !ui.focusMode ? 'w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 pointer-events-none'}`}>
+      <div className={`fixed right-0 top-[36px] bottom-0 transition-all duration-500 z-[40] ${isRightSidebarOpen && !ui.focusMode ? 'w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 pointer-events-none'}`}>
            <div className="h-full flex flex-col glass-panel border-r-0 border-y-0 border-l border-border/50 backdrop-blur-xl">
               <ThoughtStream />
            </div>

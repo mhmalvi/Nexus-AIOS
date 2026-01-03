@@ -3,7 +3,7 @@ export interface ThoughtEvent {
   id: string;
   timestamp: Date;
   type: 'thought' | 'action' | 'observation' | 'error';
-  component: 'scheduler' | 'worker' | 'supervisor' | 'memory';
+  component: 'scheduler' | 'worker' | 'supervisor' | 'memory' | 'sec-ops' | 'dev-arch' | 'data-analyst';
   content: string;
   metadata?: Record<string, any>;
 }
@@ -36,6 +36,16 @@ export interface Message {
   tool?: 'terminal' | 'browser' | 'search' | 'code';
   reactions?: string[];
   relatedArtifactId?: string;
+}
+
+export interface Agent {
+  id: string;
+  role: 'Manager' | 'SecOps' | 'DevArch' | 'Analyst';
+  name: string;
+  status: 'idle' | 'thinking' | 'executing' | 'reviewing';
+  currentTask: string;
+  confidence: number;
+  avatar: string; // icon name
 }
 
 export interface AgentState {
@@ -75,7 +85,7 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: 'info' | 'success' | 'warning' | 'error' | 'insight';
   timestamp: Date;
   read: boolean;
 }
@@ -90,6 +100,7 @@ export interface SearchResult {
 
 export interface AppState {
   agent: AgentState;
+  swarm: Agent[];
   ui: UISettings;
   commandHistory: string[];
   activeConversation: Message[];
