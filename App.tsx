@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
 import { VoiceIndicator } from './components/voice/VoiceIndicator';

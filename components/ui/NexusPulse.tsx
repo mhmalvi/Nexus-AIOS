@@ -1,6 +1,6 @@
 
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, Variants } from "framer-motion";
 
 interface NexusPulseProps {
   state: 'idle' | 'thinking' | 'action';
@@ -10,7 +10,7 @@ interface NexusPulseProps {
 
 export function NexusPulse({ state, size = 24, className = "" }: NexusPulseProps) {
   // Idle: Slow, rhythmic breathing with subtle glow
-  const idleVariants = {
+  const idleVariants: Variants = {
     animate: {
       scale: [1, 1.15, 1],
       opacity: [0.6, 0.9, 0.6],
@@ -24,7 +24,7 @@ export function NexusPulse({ state, size = 24, className = "" }: NexusPulseProps
   };
 
   // Thinking: Dynamic swirl of information
-  const thinkingVariants = {
+  const thinkingVariants: Variants = {
     animate: {
       rotate: 360,
       scale: [0.95, 1.1, 0.95],
@@ -36,7 +36,7 @@ export function NexusPulse({ state, size = 24, className = "" }: NexusPulseProps
   };
 
   // Action (Voice Input): Vibrant, high-frequency energy
-  const actionVariants = {
+  const actionVariants: Variants = {
     animate: {
       scale: [1, 1.3, 1],
       opacity: [0.8, 1, 0.8],

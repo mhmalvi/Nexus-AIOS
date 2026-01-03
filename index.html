@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full w-full overflow-hidden">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Nexus AIOS</title>
     <!-- Global Error Handler -->
     <script>
@@ -163,11 +162,18 @@
         box-shadow: var(--glass-shadow);
       }
       
+      html, body {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+
       body {
         cursor: default;
         user-select: none;
         -webkit-font-smoothing: antialiased;
-        overflow: hidden; 
         background-color: rgb(var(--background));
         color: rgb(var(--foreground));
         font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -199,9 +205,9 @@
 </script>
 </head>
   <body>
-    <div id="root" class="h-screen w-screen overflow-hidden bg-background text-foreground flex items-center justify-center">
+    <div id="root" class="h-full w-full bg-background text-foreground relative">
         <!-- Fallback loading state -->
-        <div class="flex flex-col items-center gap-4 text-zinc-500 font-mono text-xs">
+        <div class="flex flex-col items-center gap-4 text-zinc-500 font-mono text-xs p-10">
             <div class="w-8 h-8 border-2 border-zinc-700 border-t-blue-500 rounded-full animate-spin"></div>
             <span class="animate-pulse">BOOTING KERNEL...</span>
         </div>

@@ -96,4 +96,3 @@ export function SummaryOverlay({ isOpen, onClose, activeWindowId }: SummaryOverl
         </div>
     );
 }
-    

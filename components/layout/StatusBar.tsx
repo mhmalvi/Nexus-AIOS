@@ -1,85 +1,66 @@
 
-import React from "react";
-import { MessageSquare, Layout, Database, Users, Settings, Terminal, Box, PlayCircle } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Shield, Globe, Activity } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
-import { motion, AnimatePresence } from "framer-motion";
 
 export function StatusBar() {
-  const { windows, focusWindow, openWindow, activeWindowId, minimizeWindow, ui } = useStore();
+  const { agent, ui } = useStore();
+  const [latency, setLatency] = useState(12);
+  const [memory, setMemory] = useState(450);
 
-  const dockItems = [
-    { id: 'chat', icon: MessageSquare, label: 'Communicator' },
-    { id: 'war-room', icon: Layout, label: 'Mission Control' },
-    { id: 'memory', icon: Database, label: 'Memory Core' },
-    { id: 'agents', icon: Users, label: 'Swarm Cluster' },
-    { id: 'settings', icon: Settings, label: 'System' },
-  ];
-
-  const handleAppClick = (id: string) => {
-    if (!windows[id]?.isOpen) {
-      openWindow(id);
-    } else {
-      if (activeWindowId === id && !windows[id].isMinimized) {
-          minimizeWindow(id);
-      } else {
-          focusWindow(id);
-      }
-    }
-  };
+  useEffect(() => {
+    const interval = setInterval(() => {
+        // Simulate fluctuating metrics for liveliness
+        setLatency(prev => Math.max(5, prev + (Math.random() > 0.5 ? 2 : -2)));
+        setMemory(prev => Math.max(400, prev + (Math.random() > 0.5 ? 5 : -5)));
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (ui.focusMode) return null;
 
+  const isProcessing = agent.isThinking || agent.isListening;
+  // Spec: Hex #22C55E for Success Green, Orange for Idle.
+  const statusColor = isProcessing ? 'bg-[#22C55E]' : 'bg-orange-500';
+  const statusLabel = isProcessing ? 'PROCESSING' : 'IDLE';
+
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-[100] flex justify-center pointer-events-none">
-        {/* Floating Dock Container - Constrained Width */}
-        <div className="pointer-events-auto bg-background/80 dark:bg-black/60 backdrop-blur-3xl px-3 py-2.5 rounded-2xl flex items-center gap-2 shadow-[0_20px_40px_-12px_rgba(0,0,0,0.3)] border border-white/20 dark:border-white/10 ring-1 ring-black/5 dark:ring-white/5 transition-all duration-500 ease-out hover:scale-[1.01] hover:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.4)] relative">
-            
-            {dockItems.map((item) => {
-                const isOpen = windows[item.id]?.isOpen;
-                const isActive = activeWindowId === item.id;
-                
-                return (
-                    <div key={item.id} className="relative group flex flex-col items-center">
-                        <motion.button
-                            onClick={() => handleAppClick(item.id)}
-                            whileHover={{ scale: 1.15, y: -4 }}
-                            whileTap={{ scale: 0.9 }}
-                            className={`
-                                w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300 relative
-                                ${isActive 
-                                    ? 'bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(var(--primary),0.4)]' 
-                                    : 'bg-muted/40 text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:hover:bg-white/10'
-                                }
-                            `}
-                        >
-                            <item.icon className="w-5 h-5 stroke-[1.5]" />
-                        </motion.button>
-                        
-                        {/* Active Indicator Dot */}
-                        {isOpen && (
-                            <motion.div 
-                                layoutId={isActive ? "active-dock-dot" : undefined}
-                                className={`absolute -bottom-1 w-1 h-1 rounded-full ${isActive ? 'bg-primary' : 'bg-muted-foreground/30'}`} 
-                            />
-                        )}
-
-                        {/* Enhanced Tooltip */}
-                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap scale-95 group-hover:scale-100 transform origin-bottom">
-                            <div className="px-3 py-1.5 bg-popover/90 text-popover-foreground text-[11px] font-medium rounded-lg shadow-xl border border-border/50 backdrop-blur-md">
-                                {item.label}
-                            </div>
-                        </div>
-                    </div>
-                )
-            })}
-
-            <div className="w-px h-6 bg-border/40 mx-2" />
-
-            {/* Quick Actions */}
-            <button className="w-11 h-11 rounded-xl flex items-center justify-center bg-muted/40 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all hover:scale-110 active:scale-95">
-                <Terminal className="w-5 h-5 stroke-[1.5]" />
-            </button>
+    <div className="fixed bottom-0 left-0 right-0 h-[32px] bg-background border-t border-border flex items-center justify-between px-4 font-sans text-[11px] select-none z-[100] transition-colors duration-300">
+      
+      {/* Left Cluster */}
+      <div className="flex items-center gap-6">
+        {/* Active Status Indicator */}
+        <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${statusColor} ${isProcessing ? 'animate-pulse' : ''}`} />
+            <span className="font-semibold text-foreground/80 tracking-wide">{statusLabel}</span>
         </div>
+
+        {/* Security Badge */}
+        <div className="flex items-center gap-2 text-muted-foreground">
+            <Shield className="w-3.5 h-3.5" />
+            <span className="font-medium">SECURE</span>
+        </div>
+
+        {/* Network Telemetry */}
+        <div className="flex items-center gap-2 text-muted-foreground">
+            <Globe className="w-3.5 h-3.5" />
+            <span>Latency: {latency}ms</span>
+        </div>
+      </div>
+
+      {/* Right Cluster */}
+      <div className="flex items-center gap-6">
+          {/* Resource Monitor */}
+          <div className="flex items-center gap-2 text-muted-foreground">
+              <Activity className="w-3.5 h-3.5" />
+              <span>Mem: {memory}MB</span>
+          </div>
+
+          {/* System Versioning */}
+          <div className="flex items-center pl-6 border-l border-border h-4">
+             <span className="text-muted-foreground">Nexus Core v2.1.0</span>
+          </div>
+      </div>
     </div>
   );
 }

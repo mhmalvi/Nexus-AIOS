@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from "react";
-import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { StatusBar } from "./StatusBar";
+import { Dock } from "./Dock";
 import { ThoughtStream } from "../agent/ThoughtStream";
 import { CommandInput } from "../command/CommandInput";
 import { CommandPalette } from "../command/CommandPalette";
@@ -17,13 +17,15 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowState, onClose, onMinimize, onMaximize, onFocus, onSnap, activeWindowId, focusMode }: any) => {
     if (!windowState || !windowState.isOpen) return null;
-    if (focusMode && activeWindowId !== id) return null; // In Focus Mode, only show active window (or maybe none if user wants pure zen)
+    if (focusMode && activeWindowId !== id) return null;
 
     const TOP_OFFSET = 55;
-    const BOTTOM_OFFSET = 90;
     
     const initialX = id === 'chat' ? 80 : 250;
     const initialY = id === 'chat' ? 80 : 100;
+
+    // Use percentage based height to ensure it relates to the absolute main container
+    const safeMaxHeight = `calc(100% - ${TOP_OFFSET}px)`;
 
     let targetAnim: any = {
         opacity: windowState.isMinimized ? 0 : 1,
@@ -32,14 +34,14 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
     };
 
     if (focusMode) {
-         // Center window in Focus Mode
          targetAnim = { ...targetAnim, top: '50%', left: '50%', x: '-50%', y: '-50%', width: width, height: height, position: 'fixed', zIndex: 100 };
     } else if (windowState.isMaximized) {
-        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 10, right: 10, bottom: BOTTOM_OFFSET, width: 'auto', height: 'auto', borderRadius: 8 };
+        // Full screen (minus header), flush to edges and bottom
+        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 0, right: 0, bottom: 0, width: 'auto', height: 'auto', borderRadius: 0 };
     } else if (windowState.snap === 'left') {
-        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 10, bottom: BOTTOM_OFFSET, width: '48%', height: 'auto', borderRadius: 8 };
+        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 0, bottom: 0, width: '50%', height: 'auto', borderRadius: 0 };
     } else if (windowState.snap === 'right') {
-        targetAnim = { ...targetAnim, top: TOP_OFFSET, right: 10, bottom: BOTTOM_OFFSET, width: '48%', height: 'auto', left: 'auto', borderRadius: 8 };
+        targetAnim = { ...targetAnim, top: TOP_OFFSET, right: 0, bottom: 0, width: '50%', height: 'auto', left: 'auto', borderRadius: 0 };
     }
 
     const handleDragEnd = (event: any, info: any) => {
@@ -63,7 +65,12 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
             drag={!windowState.isMaximized && !windowState.snap && !focusMode}
             dragMomentum={false}
             dragElastic={0.1}
-            dragConstraints={{ left: 0, top: TOP_OFFSET, right: window.innerWidth - 100, bottom: window.innerHeight - 100 }}
+            dragConstraints={{ 
+                left: 0, 
+                top: TOP_OFFSET, 
+                right: window.innerWidth - 50, 
+                bottom: window.innerHeight // Allow dragging fully to bottom
+            }}
             onDragEnd={handleDragEnd}
             transition={{
                 layout: { type: "spring", stiffness: 350, damping: 30 },
@@ -80,11 +87,11 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
                 top: (!windowState.snap && !windowState.isMaximized && !focusMode) ? initialY : undefined,
                 width: (!windowState.snap && !windowState.isMaximized && !focusMode) ? width : undefined,
                 height: (!windowState.snap && !windowState.isMaximized && !focusMode) ? height : undefined,
+                maxHeight: (!windowState.snap && !windowState.isMaximized && !focusMode) ? safeMaxHeight : undefined,
                 pointerEvents: windowState.isMinimized ? 'none' : 'auto',
             }}
             onMouseDown={() => onFocus(id)}
         >
-            {/* Window Header */}
             {!focusMode && (
                 <div 
                     className={`h-10 shrink-0 flex items-center justify-between px-3 select-none border-b border-border/50
@@ -106,8 +113,6 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
                     </div>
                 </div>
             )}
-
-            {/* Content Area */}
             <div className="flex-1 overflow-hidden relative bg-background/40 backdrop-blur-sm" onPointerDown={(e) => e.stopPropagation()}>
                 {children}
             </div>
@@ -166,7 +171,7 @@ export function MainLayout() {
   ];
 
   return (
-    <div className="h-screen w-screen relative bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-500">
+    <div className="fixed inset-0 bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-500">
       
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -346,7 +351,7 @@ export function MainLayout() {
       </main>
 
       {/* Right Sidebar (Thought Stream) - Hidden in Focus Mode */}
-      <div className={`fixed right-0 top-[48px] bottom-[90px] transition-all duration-500 z-[40] ${isRightSidebarOpen && !ui.focusMode ? 'w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 pointer-events-none'}`}>
+      <div className={`fixed right-0 top-[48px] bottom-0 transition-all duration-500 z-[40] ${isRightSidebarOpen && !ui.focusMode ? 'w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 pointer-events-none'}`}>
            <div className="h-full flex flex-col glass-panel border-r-0 border-y-0 border-l border-border/50 backdrop-blur-xl">
               <ThoughtStream />
            </div>
@@ -358,6 +363,7 @@ export function MainLayout() {
           </button>
       )}
       
+      <Dock />
       <StatusBar />
     </div>
   );

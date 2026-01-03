@@ -1,3 +1,4 @@
+
 import { ThoughtEvent, ActionRequest } from '../types';
 
 type Listener<T> = (payload: T) => void;
