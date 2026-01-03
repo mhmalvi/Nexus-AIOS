@@ -1,16 +1,12 @@
-
 import React, { ErrorInfo, ReactNode } from "react";
-import { AlertTriangle, RefreshCw, Terminal, Activity } from "lucide-react";
-import { Button } from "./Button";
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
   hasError: boolean;
   error?: Error;
-  errorInfo?: ErrorInfo;
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
@@ -18,86 +14,58 @@ export class ErrorBoundary extends React.Component<Props, State> {
     hasError: false
   };
 
-  public static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Nexus OS Kernel Panic:", error, errorInfo);
-    this.setState({ errorInfo });
   }
 
-  public render() {
+  render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen w-full bg-black text-foreground p-6 font-mono relative overflow-hidden">
-          {/* Background Grid */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#333_1px,transparent_1px),linear-gradient(to_bottom,#333_1px,transparent_1px)] bg-[size:40px_40px] opacity-20 pointer-events-none" />
+        <div className="flex flex-col items-center justify-center h-screen w-screen bg-black text-white p-6 font-mono relative overflow-hidden z-[9999]">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,0,0,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,0,0,0.05)_1px,transparent_1px)] bg-[size:20px_20px]" />
           
-          <div className="relative z-10 max-w-2xl w-full bg-zinc-950/90 border border-red-900/50 rounded-lg shadow-2xl overflow-hidden backdrop-blur-xl animate-in zoom-in duration-300">
-            {/* Header */}
-            <div className="bg-red-950/30 border-b border-red-900/30 px-6 py-4 flex items-center justify-between">
-               <div className="flex items-center gap-3">
-                 <Terminal className="w-5 h-5 text-red-500" />
-                 <h2 className="text-lg font-bold text-red-100 tracking-wider">KERNEL_PANIC</h2>
-               </div>
-               <div className="flex gap-2">
-                 <div className="w-3 h-3 rounded-full bg-red-500/50" />
-                 <div className="w-3 h-3 rounded-full bg-yellow-500/50" />
-                 <div className="w-3 h-3 rounded-full bg-green-500/50" />
-               </div>
+          <div className="relative z-10 max-w-md w-full bg-zinc-900 border border-red-900/50 rounded-lg shadow-2xl p-6 text-center">
+            <div className="mx-auto w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/20 animate-pulse">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-red-500">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                    <path d="M12 9v4" />
+                    <path d="M12 17h.01" />
+                </svg>
+            </div>
+            
+            <h2 className="text-xl font-bold text-red-500 mb-2 tracking-widest uppercase">System Failure</h2>
+            <p className="text-zinc-400 text-xs mb-6 leading-relaxed">
+              The Nexus interface encountered a critical runtime exception. 
+              Diagnostic data has been logged.
+            </p>
+
+            <div className="bg-black/50 rounded p-3 mb-6 border border-zinc-800 text-left overflow-auto max-h-32">
+                <code className="text-[10px] text-red-400 break-all">
+                    {this.state.error?.message || 'Unknown Error'}
+                </code>
             </div>
 
-            {/* Content */}
-            <div className="p-8 space-y-6">
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-red-500/10 rounded-lg border border-red-500/20">
-                   <Activity className="w-8 h-8 text-red-500" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-xl font-medium text-red-50">Runtime Exception Detected</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    The Nexus interface encountered a critical error during the render cycle. 
-                    System integrity has been compromised. Automatic recovery failed.
-                  </p>
-                </div>
-              </div>
-
-              {/* Error Code Block */}
-              <div className="bg-black/50 border border-zinc-800 rounded-md p-4 font-mono text-xs overflow-x-auto">
-                 <div className="flex items-center gap-2 mb-2 text-zinc-500 border-b border-zinc-800 pb-2">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    STACK_TRACE_DUMP
-                 </div>
-                 <pre className="text-red-400">
-                   {this.state.error?.message || 'Unknown Error'}
-                 </pre>
-                 {this.state.errorInfo && (
-                   <pre className="text-zinc-500 mt-2 opacity-50">
-                     {this.state.errorInfo.componentStack}
-                   </pre>
-                 )}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="bg-zinc-900/50 border-t border-zinc-800 px-6 py-4 flex justify-between items-center">
-              <div className="text-[10px] text-zinc-600 uppercase tracking-widest">
-                Error Code: 0x525_REACT_MINIFIED
-              </div>
-              <Button 
-                onClick={() => window.location.reload()}
-                className="bg-red-600 hover:bg-red-700 text-white border-none shadow-lg shadow-red-900/20 gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Reboot Interface
-              </Button>
-            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16h5v5" />
+              </svg>
+              Reboot System
+            </button>
           </div>
         </div>
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Terminal, ArrowRight, Zap, FileText } from "lucide-react";
+import { Sparkles, Terminal, ArrowRight, Zap, FileText, LayoutTemplate, BoxSelect } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 import { NexusPulse } from "../ui/NexusPulse";
 
@@ -44,52 +44,32 @@ export function GhostCommandBar() {
     setGhostBarOpen(false);
   };
 
-  const predictions = input.length > 2 ? [
+  const predictions = [
     { label: "Summarize recent logs", icon: FileText, type: "analysis" },
     { label: "Deploy to staging", icon: Zap, type: "action" },
-    { label: "Run system diagnostics", icon: Terminal, type: "system" }
-  ] : [];
+    { label: "Run system diagnostics", icon: Terminal, type: "system" },
+    { label: "Create new artifact", icon: LayoutTemplate, type: "creative" }
+  ];
+
+  const filteredPredictions = input ? predictions.filter(p => p.label.toLowerCase().includes(input.toLowerCase())) : predictions.slice(0, 2);
 
   return (
     <AnimatePresence>
       {isGhostBarOpen && (
-        <div className="fixed inset-x-0 bottom-12 z-[100] flex flex-col items-center justify-end pointer-events-none">
+        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/10 backdrop-blur-[2px]">
           
-          <div className="flex gap-4 mb-4 pointer-events-auto">
-             <AnimatePresence>
-                {predictions.map((pred, i) => (
-                    <motion.button
-                        key={i}
-                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                        transition={{ delay: i * 0.05, type: "spring", stiffness: 300, damping: 25 }}
-                        onClick={() => handleSubmit(pred.label)}
-                        className="glass-panel bg-card/90 px-4 py-3 rounded-xl flex items-center gap-3 text-sm text-foreground hover:bg-muted/80 transition-colors group shadow-lg border border-border"
-                    >
-                        <div className={`p-1.5 rounded-lg ${pred.type === 'action' ? 'bg-orange-500/10 text-orange-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                            <pred.icon className="w-4 h-4" />
-                        </div>
-                        <span className="font-medium">{pred.label}</span>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity -ml-1">
-                            <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                        </div>
-                    </motion.button>
-                ))}
-             </AnimatePresence>
-          </div>
-
           <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="w-full max-w-2xl pointer-events-auto"
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            className="w-full max-w-3xl flex flex-col items-center gap-6"
           >
-            <div className="glass-panel rounded-full p-2 flex items-center gap-3 pl-5 shadow-2xl ring-1 ring-border bg-background/80 backdrop-blur-3xl">
+            {/* Command Bar */}
+            <div className="w-full relative glass-panel rounded-full p-2.5 flex items-center gap-4 pl-6 shadow-2xl ring-1 ring-white/20 bg-background/80 backdrop-blur-3xl">
                 
                 <div className="shrink-0">
-                    <NexusPulse state={agent.isThinking ? 'thinking' : input ? 'action' : 'idle'} size={24} />
+                    <NexusPulse state={agent.isThinking ? 'thinking' : input ? 'action' : 'idle'} size={28} />
                 </div>
 
                 <input
@@ -98,23 +78,49 @@ export function GhostCommandBar() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                     placeholder="Describe your intent..."
-                    className="flex-1 bg-transparent border-none focus:outline-none text-lg text-foreground placeholder:text-muted-foreground/60 font-light h-10"
+                    className="flex-1 bg-transparent border-none focus:outline-none text-xl text-foreground placeholder:text-muted-foreground/50 font-light h-12"
                 />
 
                 <div className="flex items-center gap-2 pr-2">
                     {input && (
-                        <button onClick={() => handleSubmit()} className="p-2 bg-foreground text-background rounded-full hover:scale-105 transition-transform">
-                            <ArrowRight className="w-4 h-4" />
+                        <button onClick={() => handleSubmit()} className="p-3 bg-foreground text-background rounded-full hover:scale-105 transition-transform shadow-lg">
+                            <ArrowRight className="w-5 h-5" />
                         </button>
                     )}
                     {!input && (
-                        <div className="flex items-center gap-1 px-3 py-1 bg-muted rounded-full border border-border">
-                             <Sparkles className="w-3 h-3 text-muted-foreground" />
-                             <span className="text-[10px] text-muted-foreground font-mono">CMD+J</span>
+                        <div className="flex items-center gap-1.5 px-4 py-1.5 bg-muted/40 rounded-full border border-border/40">
+                             <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
+                             <span className="text-[11px] text-muted-foreground font-mono font-medium">CMD+J</span>
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Glass Tiles Predictions */}
+            <div className="flex flex-wrap justify-center gap-4 w-full px-4">
+                 <AnimatePresence mode="popLayout">
+                    {filteredPredictions.map((pred, i) => (
+                        <motion.button
+                            key={pred.label}
+                            initial={{ opacity: 0, y: 20, scale: 0.8 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            transition={{ delay: i * 0.05, type: "spring", stiffness: 200, damping: 20 }}
+                            onClick={() => handleSubmit(pred.label)}
+                            className="glass-panel group relative overflow-hidden bg-card/40 hover:bg-card/60 border border-white/10 p-4 rounded-xl flex flex-col items-center justify-center gap-3 w-32 h-32 text-center transition-all hover:-translate-y-1 hover:shadow-xl backdrop-blur-md"
+                        >
+                            {/* Hover Gradient */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/0 to-primary/0 group-hover:from-primary/10 group-hover:to-transparent transition-all duration-500" />
+                            
+                            <div className={`p-3 rounded-full ${pred.type === 'action' ? 'bg-orange-500/10 text-orange-500' : 'bg-primary/10 text-primary'} group-hover:scale-110 transition-transform duration-300`}>
+                                <pred.icon className="w-6 h-6" />
+                            </div>
+                            <span className="text-xs font-medium text-foreground/80 leading-tight group-hover:text-foreground">{pred.label}</span>
+                        </motion.button>
+                    ))}
+                 </AnimatePresence>
+            </div>
+
           </motion.div>
         </div>
       )}

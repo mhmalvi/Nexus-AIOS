@@ -11,11 +11,12 @@
   "dependencies": {
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "lucide-react": "0.300.0",
+    "lucide-react": "0.292.0",
     "clsx": "2.1.1",
     "tailwind-merge": "2.2.0",
     "cmdk": "1.0.0",
-    "framer-motion": "10.16.4"
+    "framer-motion": "10.16.4",
+    "@google/genai": "latest"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

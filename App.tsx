@@ -1,11 +1,9 @@
-
 import React, { useEffect } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
 import { VoiceIndicator } from './components/voice/VoiceIndicator';
 import { HILModal } from './components/agent/ActionApproval';
 import { useStore } from './context/StoreContext';
 import { mockTauri } from './services/mockTauri';
-import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 function App() {
   const { 
@@ -76,7 +74,7 @@ function App() {
   }, []);
 
   return (
-    <ErrorBoundary>
+    <>
       <MainLayout />
       <VoiceIndicator 
         isListening={agent.isListening}
@@ -89,7 +87,7 @@ function App() {
         onApprove={handleApproveAction}
         onDeny={handleDenyAction}
       />
-    </ErrorBoundary>
+    </>
   );
 }
 

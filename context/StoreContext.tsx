@@ -5,8 +5,11 @@ import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, W
 interface StoreContextType extends AppState {
   setTheme: (theme: AppState['ui']['theme']) => void;
   setAccentColor: (color: string) => void;
+  setFocusMode: (enabled: boolean) => void;
   addToHistory: (command: string) => void;
   addMessage: (message: Message) => void;
+  updateMessage: (id: string, content: string) => void;
+  setThinking: (isThinking: boolean) => void;
   toggleReaction: (messageId: string, reaction: string) => void;
   startListening: () => void;
   stopListening: () => void;
@@ -19,36 +22,40 @@ interface StoreContextType extends AppState {
   spawnArtifact: (artifact: Artifact) => void;
   updateArtifact: (id: string, updates: Partial<Artifact>) => void;
   closeArtifact: (id: string) => void;
-  
-  // Window Management
   openWindow: (id: string) => void;
   closeWindow: (id: string) => void;
   minimizeWindow: (id: string) => void;
   maximizeWindow: (id: string) => void;
+  snapWindow: (id: string, snap: WindowState['snap']) => void;
   focusWindow: (id: string) => void;
-  
-  // Notifications
   addNotification: (notification: Omit<Notification, 'id' | 'read' | 'timestamp'>) => void;
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
-
   thoughtStream: ThoughtEvent[];
   isCommandPaletteOpen: boolean;
   isGhostBarOpen: boolean;
 }
 
 const getInitialTheme = (): UISettings['theme'] => {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('nexus_theme') as UISettings['theme'];
-    if (saved) return saved;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = localStorage.getItem('nexus_theme') as UISettings['theme'];
+      if (saved) return saved;
+    }
+  } catch (e) {
+    console.warn("Nexus Storage Warning: Could not access localStorage for theme.");
   }
   return 'dark'; 
 };
 
 const getInitialAccent = (): string => {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('nexus_accent');
-    if (saved) return saved;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const saved = localStorage.getItem('nexus_accent');
+      if (saved) return saved;
+    }
+  } catch (e) {
+    console.warn("Nexus Storage Warning: Could not access localStorage for accent.");
   }
   return '#007AFF'; 
 };
@@ -67,7 +74,8 @@ const initialState: AppState = {
     fontSize: 14,
     sidebarWidth: 240,
     animations: true,
-    showThoughts: true
+    showThoughts: true,
+    focusMode: false
   },
   commandHistory: [],
   activeConversation: [
@@ -95,8 +103,11 @@ const initialState: AppState = {
 type Action =
   | { type: 'SET_THEME'; payload: AppState['ui']['theme'] }
   | { type: 'SET_ACCENT_COLOR'; payload: string }
+  | { type: 'SET_FOCUS_MODE'; payload: boolean }
   | { type: 'ADD_HISTORY'; payload: string }
   | { type: 'ADD_MESSAGE'; payload: Message }
+  | { type: 'UPDATE_MESSAGE'; payload: { id: string, content: string } }
+  | { type: 'SET_THINKING'; payload: boolean }
   | { type: 'TOGGLE_REACTION'; payload: { messageId: string; reaction: string } }
   | { type: 'START_LISTENING' }
   | { type: 'STOP_LISTENING' }
@@ -110,6 +121,7 @@ type Action =
   | { type: 'UPDATE_ARTIFACT'; payload: { id: string, updates: Partial<Artifact> } }
   | { type: 'CLOSE_ARTIFACT'; payload: string }
   | { type: 'WINDOW_ACTION'; payload: { id: string, action: 'open' | 'close' | 'minimize' | 'maximize' | 'focus' } }
+  | { type: 'WINDOW_SNAP'; payload: { id: string, snap: WindowState['snap'] } }
   | { type: 'ADD_NOTIFICATION'; payload: Notification }
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }
   | { type: 'CLEAR_NOTIFICATIONS' };
@@ -122,13 +134,22 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
       return { ...state, ui: { ...state.ui, theme: action.payload } };
     case 'SET_ACCENT_COLOR':
       return { ...state, ui: { ...state.ui, accentColor: action.payload } };
+    case 'SET_FOCUS_MODE':
+      return { ...state, ui: { ...state.ui, focusMode: action.payload } };
     case 'ADD_HISTORY':
       if (state.commandHistory[0] === action.payload) return state;
       return { ...state, commandHistory: [action.payload, ...state.commandHistory].slice(0, 99) };
     case 'ADD_MESSAGE':
       return { ...state, activeConversation: [...state.activeConversation, action.payload] };
-    case 'TOGGLE_REACTION':
-      return state;
+    case 'UPDATE_MESSAGE':
+      return {
+        ...state,
+        activeConversation: state.activeConversation.map(msg => 
+          msg.id === action.payload.id ? { ...msg, content: action.payload.content } : msg
+        )
+      };
+    case 'SET_THINKING':
+      return { ...state, agent: { ...state.agent, isThinking: action.payload } };
     case 'START_LISTENING':
       return { ...state, agent: { ...state.agent, isListening: true, transcript: '' } };
     case 'STOP_LISTENING':
@@ -138,13 +159,13 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
     case 'ADD_THOUGHT':
       return { 
         ...state, 
-        agent: { ...state.agent, isThinking: true, currentThought: action.payload.content },
+        agent: { ...state.agent, currentThought: action.payload.content },
         thoughtStream: [action.payload, ...state.thoughtStream].slice(0, 50)
       };
     case 'CLEAR_THOUGHTS':
       return { 
         ...state, 
-        agent: { ...state.agent, isThinking: false, currentThought: '' },
+        agent: { ...state.agent, currentThought: '' },
         thoughtStream: []
       };
     case 'SET_PENDING_ACTION':
@@ -197,6 +218,18 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
         }
         return { ...state, windows, activeWindowId };
     }
+    case 'WINDOW_SNAP': {
+        const { id, snap } = action.payload;
+        const windows = { ...state.windows };
+        if (!windows[id]) return state;
+        
+        windows[id] = { 
+            ...windows[id], 
+            snap,
+            isMaximized: snap === 'top', // 'top' snap acts as maximize
+        };
+        return { ...state, windows };
+    }
     case 'ADD_NOTIFICATION':
         return { ...state, notifications: [action.payload, ...state.notifications] };
     case 'MARK_NOTIFICATION_READ':
@@ -208,43 +241,56 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
   }
 }
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+export function StoreProvider({ children }: { children?: ReactNode }) {
   const [state, dispatch] = useReducer(storeReducer, { ...initialState, thoughtStream: [], isCommandPaletteOpen: false, isGhostBarOpen: false });
 
-  // Theme Handling
   useEffect(() => {
-    const root = window.document.documentElement;
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    try {
+        const root = window.document.documentElement;
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-    const applyTheme = () => {
-      const theme = state.ui.theme;
-      root.classList.remove('light', 'dark');
-      
-      if (theme === 'system') {
-        const systemTheme = mediaQuery.matches ? 'dark' : 'light';
-        root.classList.add(systemTheme);
-      } else {
-        root.classList.add(theme);
-      }
-    };
+        const applyTheme = () => {
+        const theme = state.ui.theme;
+        root.classList.remove('light', 'dark');
+        
+        if (theme === 'system') {
+            const systemTheme = mediaQuery.matches ? 'dark' : 'light';
+            root.classList.add(systemTheme);
+        } else {
+            root.classList.add(theme);
+        }
+        };
 
-    applyTheme();
-    // Dynamic Accent Color
-    root.style.setProperty('--primary', state.ui.accentColor);
-    root.style.setProperty('--ring', state.ui.accentColor);
-    root.style.setProperty('--nexus-brain', state.ui.accentColor);
+        applyTheme();
+        root.style.setProperty('--primary', state.ui.accentColor);
+        root.style.setProperty('--ring', state.ui.accentColor);
+        root.style.setProperty('--nexus-brain', state.ui.accentColor);
 
-    const handleSystemChange = () => { if (state.ui.theme === 'system') applyTheme(); };
-    mediaQuery.addEventListener('change', handleSystemChange);
-    return () => mediaQuery.removeEventListener('change', handleSystemChange);
+        const handleSystemChange = () => { if (state.ui.theme === 'system') applyTheme(); };
+        mediaQuery.addEventListener('change', handleSystemChange);
+        
+        try {
+            if (window.localStorage) {
+                localStorage.setItem('nexus_theme', state.ui.theme);
+                localStorage.setItem('nexus_accent', state.ui.accentColor);
+            }
+        } catch(e) {}
+
+        return () => mediaQuery.removeEventListener('change', handleSystemChange);
+    } catch(e) {
+        console.error("Theme effect failed", e);
+    }
   }, [state.ui.theme, state.ui.accentColor]);
 
   const value = {
     ...state,
     setTheme: (theme: AppState['ui']['theme']) => dispatch({ type: 'SET_THEME', payload: theme }),
     setAccentColor: (color: string) => dispatch({ type: 'SET_ACCENT_COLOR', payload: color }),
+    setFocusMode: (enabled: boolean) => dispatch({ type: 'SET_FOCUS_MODE', payload: enabled }),
     addToHistory: (command: string) => dispatch({ type: 'ADD_HISTORY', payload: command }),
     addMessage: (message: Message) => dispatch({ type: 'ADD_MESSAGE', payload: message }),
+    updateMessage: (id: string, content: string) => dispatch({ type: 'UPDATE_MESSAGE', payload: { id, content } }),
+    setThinking: (isThinking: boolean) => dispatch({ type: 'SET_THINKING', payload: isThinking }),
     toggleReaction: (messageId: string, reaction: string) => dispatch({ type: 'TOGGLE_REACTION', payload: { messageId, reaction } }),
     startListening: () => dispatch({ type: 'START_LISTENING' }),
     stopListening: () => dispatch({ type: 'STOP_LISTENING' }),
@@ -257,15 +303,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     spawnArtifact: (artifact: Artifact) => dispatch({ type: 'SPAWN_ARTIFACT', payload: artifact }),
     updateArtifact: (id: string, updates: Partial<Artifact>) => dispatch({ type: 'UPDATE_ARTIFACT', payload: { id, updates } }),
     closeArtifact: (id: string) => dispatch({ type: 'CLOSE_ARTIFACT', payload: id }),
-    
-    // Window Actions
     openWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'open' } }),
     closeWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'close' } }),
     minimizeWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'minimize' } }),
     maximizeWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'maximize' } }),
+    snapWindow: (id: string, snap: WindowState['snap']) => dispatch({ type: 'WINDOW_SNAP', payload: { id, snap } }),
     focusWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'focus' } }),
-
-    // Notifications
     addNotification: (n: Omit<Notification, 'id' | 'read' | 'timestamp'>) => dispatch({ 
         type: 'ADD_NOTIFICATION', 
         payload: { ...n, id: Date.now().toString(), read: false, timestamp: new Date() } 

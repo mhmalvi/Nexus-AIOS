@@ -47,7 +47,7 @@ export function WarRoom() {
   return (
     <div className="h-full p-4 grid grid-cols-2 grid-rows-[2fr_1fr] gap-4 font-mono text-xs">
       
-      {/* 1. Worker Agent (Terminal) - Uses dark theme always for terminal feel, or semantic? Let's use semantic but inverted for terminal. */}
+      {/* 1. Worker Agent (Terminal) */}
       <div className="glass-panel bg-card border border-border rounded-xl overflow-hidden flex flex-col relative group col-span-1 row-span-1 shadow-sm">
         <div className="bg-muted/50 border-b border-border p-2 flex items-center justify-between">
             <div className="flex items-center gap-2 text-primary">
@@ -154,7 +154,7 @@ export function WarRoom() {
         </div>
       </div>
 
-      {/* 3. Memory Context (RAG) - Bottom Left */}
+      {/* 3. Memory Context (RAG) */}
       <div className="glass-panel bg-card border border-border rounded-xl overflow-hidden flex flex-col col-span-1 row-span-1 shadow-sm">
         <div className="bg-muted/50 border-b border-border p-2 flex items-center gap-2 text-nexus-memory">
             <Database className="w-4 h-4 text-purple-500" />
@@ -187,3 +187,4 @@ function CheckMark() {
         </div>
     )
 }
+    

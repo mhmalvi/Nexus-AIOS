@@ -106,3 +106,4 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
         </AnimatePresence>
     );
 }
+    

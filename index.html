@@ -5,6 +5,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nexus AIOS</title>
+    <!-- Global Error Handler -->
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.error("Global Error:", message, error);
+        if (!message.toString().includes('Script error')) {
+            // Suppress alert for cleaner UX, log to console is sufficient for dev
+        }
+      };
+    </script>
+    <!-- Polyfill for process -->
+    <script>
+      (function() {
+        var env = { NODE_ENV: 'development' };
+        if (typeof process === 'undefined') {
+          window.process = { env: env };
+        } else if (!process.env) {
+          process.env = env;
+        }
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -49,12 +69,11 @@
                 DEFAULT: "rgb(var(--card) / <alpha-value>)",
                 foreground: "rgb(var(--card-foreground) / <alpha-value>)",
               },
-              // Nexus Specific Premium Colors
               nexus: {
-                brain: "#007AFF", // Blue
-                memory: "#BF5AF2", // Purple
-                tool: "#32D74B",  // Green
-                alert: "#FF9F0A", // Orange
+                brain: "#007AFF",
+                memory: "#BF5AF2",
+                tool: "#32D74B",
+                alert: "#FF9F0A",
               }
             },
             borderRadius: {
@@ -65,6 +84,7 @@
             animation: {
               'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
               'float': 'float 6s ease-in-out infinite',
+              'spin-slow': 'spin 8s linear infinite',
             },
             keyframes: {
               float: {
@@ -77,98 +97,72 @@
       }
     </script>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
       :root {
-        /* Light Mode Defaults - Clean, Apple-like, High Contrast */
-        --background: 245 245 247;
-        --foreground: 29 29 31;
-        
+        /* Light Mode - Aether Glass (Frosted White) */
+        --background: 240 242 245; /* Soft grey-blue tint */
+        --foreground: 23 23 23;    /* Near black */
         --card: 255 255 255;
-        --card-foreground: 29 29 31;
-        
+        --card-foreground: 23 23 23;
         --popover: 255 255 255;
-        --popover-foreground: 29 29 31;
-        
-        --primary: 0 122 255;
+        --popover-foreground: 23 23 23;
+        --primary: 0 112 243;      /* Vibrant Blue */
         --primary-foreground: 255 255 255;
-        
-        --secondary: 235 235 240;
-        --secondary-foreground: 29 29 31;
-        
-        --muted: 242 242 247;
-        --muted-foreground: 134 134 139;
-        
+        --secondary: 230 232 235;
+        --secondary-foreground: 23 23 23;
+        --muted: 243 244 246;
+        --muted-foreground: 107 114 128;
         --accent: 255 255 255;
-        --accent-foreground: 29 29 31;
-        
-        --destructive: 255 59 48;
+        --accent-foreground: 23 23 23;
+        --destructive: 239 68 68;
         --destructive-foreground: 255 255 255;
+        --border: 220 220 230;     /* Crisp borders */
+        --input: 220 220 230;
+        --ring: 0 112 243;
         
-        --border: 209 209 214;
-        --input: 209 209 214;
-        --ring: 0 122 255;
-        --radius: 0.75rem;
-
-        --glass-bg: rgba(255, 255, 255, 0.65);
-        --glass-border: rgba(255, 255, 255, 0.4);
-        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+        --glass-bg: rgba(255, 255, 255, 0.75);
+        --glass-border: rgba(255, 255, 255, 0.8);
+        --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        --glass-blur: 24px;
       }
     
       .dark {
-        /* Dark Mode Defaults - Deep Space, Neon Accents */
-        --background: 10 10 12;
-        --foreground: 245 245 247;
-        
-        --card: 28 28 30;
-        --card-foreground: 245 245 247;
-        
-        --popover: 28 28 30;
-        --popover-foreground: 245 245 247;
-        
-        --primary: 10 132 255;
+        /* Dark Mode - Deep Space (Neon Accents) */
+        --background: 5 5 5;       /* True Black */
+        --foreground: 250 250 250;
+        --card: 20 20 22;
+        --card-foreground: 250 250 250;
+        --popover: 20 20 22;
+        --popover-foreground: 250 250 250;
+        --primary: 59 130 246;     /* Neon Blue */
         --primary-foreground: 255 255 255;
-        
-        --secondary: 44 44 46;
-        --secondary-foreground: 245 245 247;
-        
-        --muted: 28 28 30;
-        --muted-foreground: 161 161 166;
-        
-        --accent: 44 44 46;
-        --accent-foreground: 245 245 247;
-        
-        --destructive: 255 69 58;
+        --secondary: 30 30 35;
+        --secondary-foreground: 250 250 250;
+        --muted: 20 20 22;
+        --muted-foreground: 156 163 175;
+        --accent: 30 30 35;
+        --accent-foreground: 250 250 250;
+        --destructive: 220 38 38;
         --destructive-foreground: 255 255 255;
-        
-        --border: 58 58 60;
-        --input: 58 58 60;
-        --ring: 10 132 255;
+        --border: 40 40 45;
+        --input: 40 40 45;
+        --ring: 59 130 246;
 
-        --glass-bg: rgba(30, 30, 35, 0.6);
-        --glass-border: rgba(255, 255, 255, 0.1);
-        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        --glass-bg: rgba(20, 20, 25, 0.7);
+        --glass-border: rgba(255, 255, 255, 0.08);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        --glass-blur: 24px;
       }
 
-      /* Aether Glass Utilities */
       .glass-panel {
         background: var(--glass-bg);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
+        backdrop-filter: blur(var(--glass-blur));
+        -webkit-backdrop-filter: blur(var(--glass-blur));
         border: 1px solid var(--glass-border);
         box-shadow: var(--glass-shadow);
       }
       
-      .glass-panel-hover {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      
-      .glass-panel-hover:hover {
-        background: rgb(var(--card) / 0.8);
-        border-color: rgb(var(--border) / 0.8);
-        box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.2);
-      }
-
       body {
         cursor: default;
         user-select: none;
@@ -176,14 +170,15 @@
         overflow: hidden; 
         background-color: rgb(var(--background));
         color: rgb(var(--foreground));
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
       }
       
-      .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-      }
-      .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
+      .scrollbar-hide::-webkit-scrollbar { display: none; }
+      .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      
+      /* Utilities */
+      .glow-text {
+        text-shadow: 0 0 10px rgb(var(--primary) / 0.5);
       }
     </style>
   <script type="importmap">
@@ -193,16 +188,24 @@
     "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
     "react-dom/": "https://esm.sh/react-dom@18.2.0/",
     "react/": "https://esm.sh/react@18.2.0/",
-    "lucide-react": "https://esm.sh/lucide-react@0.300.0?deps=react@18.2.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0",
     "clsx": "https://esm.sh/clsx@2.1.1",
     "tailwind-merge": "https://esm.sh/tailwind-merge@2.2.0",
     "cmdk": "https://esm.sh/cmdk@1.0.0?deps=react@18.2.0,react-dom@18.2.0",
-    "framer-motion": "https://esm.sh/framer-motion@10.16.4?deps=react@18.2.0,react-dom@18.2.0"
+    "framer-motion": "https://esm.sh/framer-motion@10.16.4?deps=react@18.2.0,react-dom@18.2.0",
+    "@google/genai": "https://esm.sh/@google/genai"
   }
 }
 </script>
 </head>
   <body>
-    <div id="root" class="h-screen w-screen overflow-hidden bg-background text-foreground transition-colors duration-500"></div>
+    <div id="root" class="h-screen w-screen overflow-hidden bg-background text-foreground flex items-center justify-center">
+        <!-- Fallback loading state -->
+        <div class="flex flex-col items-center gap-4 text-zinc-500 font-mono text-xs">
+            <div class="w-8 h-8 border-2 border-zinc-700 border-t-blue-500 rounded-full animate-spin"></div>
+            <span class="animate-pulse">BOOTING KERNEL...</span>
+        </div>
+    </div>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>

@@ -58,6 +58,7 @@ export interface UISettings {
   sidebarWidth: number;
   animations: boolean;
   showThoughts: boolean;
+  focusMode: boolean;
 }
 
 export interface WindowState {
@@ -65,6 +66,7 @@ export interface WindowState {
   isOpen: boolean;
   isMinimized: boolean;
   isMaximized: boolean;
+  snap?: 'left' | 'right' | 'top' | null;
   position?: { x: number; y: number };
   zIndex: number;
 }

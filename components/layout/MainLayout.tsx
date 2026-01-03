@@ -12,62 +12,103 @@ import { WarRoom } from "../agent/WarRoom";
 import { NotificationCenter } from "./NotificationCenter";
 import { SummaryOverlay } from "./SummaryOverlay";
 import { useStore } from "../../context/StoreContext";
-import { User, Bot, Terminal, Code, Globe, Search, Maximize2, X, Minus, Layout, ChevronRight, ChevronLeft, Boxes, Settings, Users, Keyboard } from "lucide-react";
-import { motion, AnimatePresence, useDragControls } from "framer-motion";
+import { User, Bot, Terminal, Code, Globe, Search, Maximize2, Minimize2, X, Minus, Layout, ChevronRight, ChevronLeft, Layers, Settings, Users } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowState, onClose, onMinimize, onMaximize, onFocus }: any) => {
-    const dragControls = useDragControls();
+const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowState, onClose, onMinimize, onMaximize, onFocus, onSnap, activeWindowId, focusMode }: any) => {
     if (!windowState || !windowState.isOpen) return null;
+    if (focusMode && activeWindowId !== id) return null; // In Focus Mode, only show active window (or maybe none if user wants pure zen)
+
+    const TOP_OFFSET = 55;
+    const BOTTOM_OFFSET = 90;
+    
+    const initialX = id === 'chat' ? 80 : 250;
+    const initialY = id === 'chat' ? 80 : 100;
+
+    let targetAnim: any = {
+        opacity: windowState.isMinimized ? 0 : 1,
+        scale: windowState.isMinimized ? 0.8 : 1,
+        filter: windowState.isMinimized ? "blur(20px)" : "blur(0px)",
+    };
+
+    if (focusMode) {
+         // Center window in Focus Mode
+         targetAnim = { ...targetAnim, top: '50%', left: '50%', x: '-50%', y: '-50%', width: width, height: height, position: 'fixed', zIndex: 100 };
+    } else if (windowState.isMaximized) {
+        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 10, right: 10, bottom: BOTTOM_OFFSET, width: 'auto', height: 'auto', borderRadius: 8 };
+    } else if (windowState.snap === 'left') {
+        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 10, bottom: BOTTOM_OFFSET, width: '48%', height: 'auto', borderRadius: 8 };
+    } else if (windowState.snap === 'right') {
+        targetAnim = { ...targetAnim, top: TOP_OFFSET, right: 10, bottom: BOTTOM_OFFSET, width: '48%', height: 'auto', left: 'auto', borderRadius: 8 };
+    }
+
+    const handleDragEnd = (event: any, info: any) => {
+        if (focusMode) return;
+        const x = info.point.x;
+        const y = info.point.y;
+        const screenW = window.innerWidth;
+        if (x < 30) onSnap(id, 'left');
+        else if (x > screenW - 30) onSnap(id, 'right');
+        else if (y < 60) onMaximize(id); 
+        else if (windowState.snap || windowState.isMaximized) onSnap(id, null);
+    };
 
     return (
         <motion.div
             key={id}
-            drag={!windowState.isMaximized}
-            dragListener={false}
-            dragControls={dragControls}
+            layout
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={targetAnim}
+            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+            drag={!windowState.isMaximized && !windowState.snap && !focusMode}
             dragMomentum={false}
             dragElastic={0.1}
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ 
-                opacity: windowState.isMinimized ? 0 : 1, 
-                scale: windowState.isMinimized ? 0.8 : 1, 
-                y: windowState.isMinimized ? 200 : 0,
-                x: windowState.isMinimized ? 0 : undefined,
-                pointerEvents: windowState.isMinimized ? 'none' : 'auto'
+            dragConstraints={{ left: 0, top: TOP_OFFSET, right: window.innerWidth - 100, bottom: window.innerHeight - 100 }}
+            onDragEnd={handleDragEnd}
+            transition={{
+                layout: { type: "spring", stiffness: 350, damping: 30 },
+                opacity: { duration: 0.2 }
             }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`absolute glass-panel rounded-lg overflow-hidden shadow-2xl border border-border flex flex-col transition-all duration-300
-                ${windowState.isMaximized ? '!inset-2 !w-auto !h-auto z-50' : ''}
+            className={`absolute flex flex-col glass-panel shadow-2xl overflow-hidden
+                ${(windowState.snap || windowState.isMaximized || focusMode) ? '' : 'rounded-xl'}
+                ${activeWindowId === id ? 'ring-1 ring-primary/40 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.3)]' : 'grayscale-[0.3] opacity-90'}
+                ${focusMode ? 'shadow-[0_0_100px_rgba(0,0,0,0.5)] border-white/20' : ''}
             `}
             style={{ 
-                zIndex: windowState.zIndex, 
-                left: windowState.isMaximized ? 0 : (id === 'chat' ? '120px' : '25%'), 
-                top: windowState.isMaximized ? 0 : (id === 'chat' ? '100px' : '15%'),
-                width: windowState.isMaximized ? 'auto' : width,
-                height: windowState.isMaximized ? 'auto' : height,
+                zIndex: windowState.zIndex,
+                left: (!windowState.snap && !windowState.isMaximized && !focusMode) ? initialX : undefined,
+                top: (!windowState.snap && !windowState.isMaximized && !focusMode) ? initialY : undefined,
+                width: (!windowState.snap && !windowState.isMaximized && !focusMode) ? width : undefined,
+                height: (!windowState.snap && !windowState.isMaximized && !focusMode) ? height : undefined,
+                pointerEvents: windowState.isMinimized ? 'none' : 'auto',
             }}
             onMouseDown={() => onFocus(id)}
         >
-            <div 
-                className="h-10 bg-muted/80 backdrop-blur-md border-b border-border flex items-center justify-between px-4 cursor-default select-none"
-                onPointerDown={(e) => {
-                    if (!windowState.isMaximized) dragControls.start(e);
-                    onFocus(id);
-                }}
-                onDoubleClick={() => onMaximize(id)}
-            >
-                <div className="flex items-center gap-3">
-                    <Icon className="w-4 h-4 text-primary" />
-                    <span className="text-xs font-bold text-foreground tracking-wide uppercase">{title}</span>
+            {/* Window Header */}
+            {!focusMode && (
+                <div 
+                    className={`h-10 shrink-0 flex items-center justify-between px-3 select-none border-b border-border/50
+                        ${activeWindowId === id ? 'bg-secondary/40' : 'bg-secondary/10'}
+                    `}
+                    onDoubleClick={() => onMaximize(id)}
+                >
+                    <div className="flex items-center gap-3 text-xs font-bold tracking-wide text-foreground/80">
+                        <Icon className="w-3.5 h-3.5 opacity-70" />
+                        <span>{title}</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 z-50" onPointerDown={(e) => e.stopPropagation()}>
+                        <button onClick={() => onMinimize(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"><Minus className="w-3 h-3" /></button>
+                        <button onClick={() => onMaximize(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                            {windowState.isMaximized ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+                        </button>
+                        <button onClick={() => onClose(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"><X className="w-3 h-3" /></button>
+                    </div>
                 </div>
-                <div className="flex gap-2 items-center" onPointerDown={(e) => e.stopPropagation()}>
-                    <button onClick={() => onMinimize(id)} className="w-6 h-6 flex items-center justify-center hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"><Minus className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => onMaximize(id)} className="w-6 h-6 flex items-center justify-center hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"><Maximize2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => onClose(id)} className="w-6 h-6 flex items-center justify-center hover:bg-red-500/20 rounded text-muted-foreground hover:text-red-500 transition-colors"><X className="w-3.5 h-3.5" /></button>
-                </div>
-            </div>
-            <div className="flex-1 overflow-hidden relative bg-card/50 backdrop-blur-sm">
+            )}
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-hidden relative bg-background/40 backdrop-blur-sm" onPointerDown={(e) => e.stopPropagation()}>
                 {children}
             </div>
         </motion.div>
@@ -75,14 +116,13 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
 };
 
 export function MainLayout() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   
   const { 
       activeConversation, artifacts, closeArtifact, windows, closeWindow, minimizeWindow, maximizeWindow, focusWindow, 
-      ui, setAccentColor, activeWindowId, setCommandPaletteOpen, openWindow
+      ui, setAccentColor, activeWindowId, setCommandPaletteOpen, openWindow, snapWindow
   } = useStore();
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -91,23 +131,20 @@ export function MainLayout() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeConversation]);
 
-  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-        // Toggle Sidebar: Cmd+B
         if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
             e.preventDefault();
             setIsRightSidebarOpen(prev => !prev);
         }
-        // Shortcuts Help: Cmd+/
         if ((e.metaKey || e.ctrlKey) && e.key === '/') {
             e.preventDefault();
-            openWindow('settings'); // Quick hack to show settings where cheat sheet is
+            openWindow('settings'); 
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [openWindow]);
 
   const getToolIcon = (tool?: string) => {
     switch(tool) {
@@ -129,13 +166,14 @@ export function MainLayout() {
   ];
 
   return (
-    <div className="h-screen w-screen relative bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-300">
+    <div className="h-screen w-screen relative bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-500">
       
-      {/* 0. DESKTOP WALLPAPER */}
+      {/* Dynamic Background */}
       <div className="absolute inset-0 z-0 pointer-events-none">
-         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-background to-background" />
-         <div className="absolute bottom-0 left-0 w-full h-1/2 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-secondary/30 via-background to-background" />
-         <div className="absolute inset-0 bg-[linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] bg-[size:100px_100px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_100%)] opacity-[0.03]" />
+         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 blur-[120px] rounded-full dark:opacity-30" />
+         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[100px] rounded-full dark:opacity-20" />
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.02]" />
+         {ui.focusMode && <div className="absolute inset-0 bg-background/80 backdrop-blur-sm transition-all duration-700" />}
       </div>
 
       <CommandPalette />
@@ -143,31 +181,62 @@ export function MainLayout() {
       <NotificationCenter isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
       <SummaryOverlay isOpen={isSummaryOpen} onClose={() => setIsSummaryOpen(false)} activeWindowId={activeWindowId} />
       
-      {/* 1. HEADER */}
-      <div className="absolute top-0 left-0 right-0 z-[60] h-10">
-        <Header 
-            onToggleNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)} 
-            onSummarize={() => setIsSummaryOpen(true)}
-        />
-      </div>
+      <Header 
+          onToggleNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)} 
+          onSummarize={() => setIsSummaryOpen(true)}
+      />
 
-      {/* 2. SIDEBAR */}
-      <div className="absolute top-12 bottom-20 left-3 z-[55] flex flex-col justify-center pointer-events-none">
-        <div className="pointer-events-auto">
-            <Sidebar 
-                isCollapsed={isSidebarCollapsed}
-                onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            />
-        </div>
-      </div>
+      {/* Main Desktop Area */}
+      <main className="absolute top-0 bottom-0 left-0 right-0 z-10 overflow-hidden">
+        
+        <div className="relative w-full h-full">
+            {/* Ambient Artifacts (Canvas Mode) */}
+            <AnimatePresence>
+                {artifacts.map((artifact, i) => (
+                    <motion.div 
+                        key={artifact.id}
+                        drag={!ui.focusMode}
+                        dragMomentum={false}
+                        whileDrag={{ scale: 1.05, cursor: 'grabbing', zIndex: 100 }}
+                        initial={{ opacity: 0, scale: 0.8, y: 50, rotateX: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={{ type: "spring", stiffness: 200, damping: 20 }}
+                        className={`absolute rounded-2xl overflow-hidden glass-panel shadow-2xl z-[60]
+                            ${ui.focusMode ? 'grayscale opacity-20 hover:grayscale-0 hover:opacity-100 transition-all' : ''}
+                        `}
+                        style={{
+                            top: `${15 + (i * 5)}%`,
+                            left: `${35 + (i * 4)}%`,
+                            width: '550px',
+                            height: '420px',
+                        }}
+                    >
+                         <div className="h-10 bg-white/5 border-b border-white/10 flex items-center justify-between px-4 cursor-move backdrop-blur-xl">
+                            <div className="flex items-center gap-2 text-xs font-bold text-foreground/80">
+                                <Code className="w-3 h-3 text-primary" />
+                                <span className="opacity-90 tracking-wide uppercase">{artifact.title}</span>
+                            </div>
+                            <button className="w-5 h-5 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors" onClick={() => closeArtifact(artifact.id)}>
+                                <X className="w-3 h-3" />
+                            </button>
+                        </div>
+                        <div className="h-full bg-black/40 p-0 overflow-auto pb-10">
+                            {artifact.type === 'code' ? (
+                                <pre className="text-xs font-mono text-zinc-300 leading-relaxed p-4">
+                                    {artifact.content}
+                                </pre>
+                            ) : (
+                                <div className="text-sm text-foreground p-6">{artifact.content}</div>
+                            )}
+                        </div>
+                    </motion.div>
+                ))}
+            </AnimatePresence>
 
-      {/* 3. MAIN DESKTOP */}
-      <main className="absolute inset-0 pt-10 pb-16 px-0 z-10 overflow-hidden pointer-events-none">
-        <div className="relative w-full h-full pointer-events-auto">
-
-            {/* Communicator */}
-            <WindowFrame id="chat" title="Nexus Communicator" icon={Bot} width="450px" height="80%" windowState={windows['chat']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow}>
-                 <div className="flex flex-col h-full bg-background/40">
+            {/* Windows */}
+            <WindowFrame id="chat" title="Nexus Communicator" icon={Bot} width="450px" height="600px" windowState={windows['chat']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                 <div className="flex flex-col h-full">
                     <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-4 scrollbar-hide">
                         {activeConversation.map((msg) => (
                             <motion.div 
@@ -177,15 +246,15 @@ export function MainLayout() {
                                 className={`flex gap-3 group ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                             >
                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-1 border border-border ${
-                                    msg.role === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'
+                                    msg.role === 'user' ? 'bg-secondary text-secondary-foreground' : 'bg-primary/20 text-primary'
                                 }`}>
                                     {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
                                 </div>
                                 <div className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                                    <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm border ${
+                                    <div className={`px-4 py-2.5 rounded-lg text-sm leading-relaxed shadow-sm border ${
                                         msg.role === 'user' 
-                                        ? 'bg-secondary border-border text-foreground rounded-tr-sm' 
-                                        : 'bg-card border-border text-card-foreground rounded-tl-sm'
+                                        ? 'bg-secondary border-border text-foreground' 
+                                        : 'bg-card border-border text-foreground'
                                     }`}>
                                         <div className="whitespace-pre-wrap">{msg.content}</div>
                                         {msg.role === 'assistant' && msg.tool && (
@@ -200,25 +269,25 @@ export function MainLayout() {
                         ))}
                         <div ref={messagesEndRef} />
                     </div>
-                    <div className="p-4 bg-background/60 backdrop-blur-md border-t border-border">
+                    <div className="p-4 bg-background/50 border-t border-border/50">
                         <CommandInput />
                     </div>
                  </div>
             </WindowFrame>
 
-            <WindowFrame id="war-room" title="War Room / Mission Control" icon={Layout} width="900px" height="650px" windowState={windows['war-room']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow}>
+            <WindowFrame id="war-room" title="Mission Control" icon={Layout} width="900px" height="650px" windowState={windows['war-room']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                 <WarRoom />
             </WindowFrame>
 
-            <WindowFrame id="memory" title="Memory Core Visualization" icon={Boxes} width="900px" height="650px" windowState={windows['memory']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow}>
+            <WindowFrame id="memory" title="Memory Core" icon={Layers} width="900px" height="650px" windowState={windows['memory']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                 <MemoryViewer />
             </WindowFrame>
 
-             <WindowFrame id="agents" title="Autonomous Swarm" icon={Users} width="700px" height="500px" windowState={windows['agents']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow}>
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-background/50">
-                    <div className="grid grid-cols-2 gap-6 p-8 w-full h-full overflow-y-auto">
+             <WindowFrame id="agents" title="Swarm Cluster" icon={Users} width="700px" height="500px" windowState={windows['agents']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                    <div className="grid grid-cols-2 gap-4 p-6 w-full h-full overflow-y-auto">
                         {['Scheduler', 'Researcher', 'Coder', 'Reviewer'].map((role, i) => (
-                            <div key={i} className="glass-panel p-4 rounded-xl border border-border hover:border-primary/50 transition-colors cursor-pointer group">
+                            <div key={i} className="bg-card/50 p-4 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer group hover:shadow-lg">
                                 <div className="flex items-center gap-3 mb-3">
                                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                                         <Bot className="w-5 h-5 text-primary" />
@@ -240,29 +309,27 @@ export function MainLayout() {
                 </div>
             </WindowFrame>
             
-            {/* UPDATED SETTINGS WINDOW */}
-             <WindowFrame id="settings" title="System Settings" icon={Settings} width="600px" height="650px" windowState={windows['settings']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow}>
-                <div className="p-6 space-y-8 bg-background/50 h-full overflow-y-auto">
-                    {/* Appearance Section */}
+             <WindowFrame id="settings" title="System Preferences" icon={Settings} width="600px" height="650px" windowState={windows['settings']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                <div className="p-6 space-y-8 h-full overflow-y-auto">
                     <section>
                         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Appearance</h3>
                         <div className="space-y-4">
-                            <div className="glass-panel p-4 rounded-xl border border-border space-y-4">
+                            <div className="bg-card/50 p-4 rounded-lg border border-border space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium">Interface Theme</span>
+                                    <span className="text-sm font-medium text-foreground">Interface Theme</span>
                                     <div className="flex gap-2">
-                                        <button className="w-8 h-8 rounded-full bg-white border border-gray-200 shadow-sm hover:scale-110 transition-transform" onClick={() => {/* Theme toggle handled in palette */}} title="Light" />
-                                        <button className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 shadow-sm hover:scale-110 transition-transform" onClick={() => {/* Theme toggle handled in palette */}} title="Dark" />
+                                        {/* Theme controls handled in Header now */}
+                                        <span className="text-xs text-muted-foreground">Managed via Command Deck</span>
                                     </div>
                                 </div>
                                 <div className="pt-4 border-t border-border">
-                                    <span className="text-sm font-medium mb-3 block">Accent Color</span>
+                                    <span className="text-sm font-medium mb-3 block text-foreground">Accent Color</span>
                                     <div className="flex gap-3">
                                         {colors.map((c) => (
                                             <button
                                                 key={c.value}
                                                 onClick={() => setAccentColor(c.value)}
-                                                className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${ui.accentColor === c.value ? 'border-foreground scale-110' : 'border-transparent'}`}
+                                                className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${ui.accentColor === c.value ? 'border-primary scale-110 shadow-lg' : 'border-transparent'}`}
                                                 style={{ backgroundColor: c.value }}
                                                 title={c.name}
                                             />
@@ -272,101 +339,25 @@ export function MainLayout() {
                             </div>
                         </div>
                     </section>
-                    
-                    {/* Shortcuts Cheat Sheet */}
-                    <section>
-                         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Keyboard Shortcuts</h3>
-                         <div className="glass-panel p-0 rounded-xl border border-border overflow-hidden">
-                             {[
-                                 { keys: ['⌘', 'K'], label: 'Toggle Command Palette' },
-                                 { keys: ['⌘', 'J'], label: 'Toggle Ghost Bar' },
-                                 { keys: ['⌘', 'B'], label: 'Toggle Right Sidebar' },
-                                 { keys: ['Alt', 'Space'], label: 'Quick Search' },
-                             ].map((s, i) => (
-                                 <div key={i} className="flex items-center justify-between p-3 border-b border-border last:border-0 hover:bg-muted/30">
-                                     <span className="text-sm text-foreground">{s.label}</span>
-                                     <div className="flex gap-1">
-                                         {s.keys.map(k => (
-                                             <kbd key={k} className="bg-muted px-2 py-1 rounded text-xs font-mono border border-border">{k}</kbd>
-                                         ))}
-                                     </div>
-                                 </div>
-                             ))}
-                         </div>
-                    </section>
-
-                    <section>
-                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Kernel</h3>
-                        <div className="flex items-center justify-between p-3 glass-panel rounded-lg border border-border">
-                            <span>Version</span>
-                            <span className="font-mono text-xs">v3.0.1-stable</span>
-                        </div>
-                    </section>
                 </div>
             </WindowFrame>
 
-            <AnimatePresence>
-                {artifacts.map((artifact, i) => (
-                    <motion.div 
-                        key={artifact.id}
-                        drag
-                        dragMomentum={false}
-                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="absolute rounded-xl overflow-hidden glass-panel shadow-2xl ring-1 ring-border z-[60]"
-                        style={{
-                            top: `${10 + (i * 3)}%`,
-                            left: `${40 + (i * 3)}%`,
-                            width: '500px',
-                            height: '400px',
-                        }}
-                    >
-                        <div className="h-9 bg-muted/50 border-b border-border flex items-center justify-between px-3 cursor-move">
-                            <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-                                <div className="flex gap-1.5 mr-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/20 hover:bg-red-500 border border-red-500/30 cursor-pointer" onClick={() => closeArtifact(artifact.id)} />
-                                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/20 border border-yellow-500/30" />
-                                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/20 border border-green-500/30" />
-                                </div>
-                                <span className="opacity-90 tracking-wide text-[10px] uppercase font-bold">{artifact.title}</span>
-                            </div>
-                        </div>
-                        <div className="h-full bg-card p-4 overflow-auto pb-10">
-                            {artifact.type === 'code' ? (
-                                <pre className="text-xs font-mono text-foreground/80 leading-relaxed p-2 bg-muted/30 rounded border border-border">
-                                    {artifact.content}
-                                </pre>
-                            ) : (
-                                <div className="text-sm text-foreground">{artifact.content}</div>
-                            )}
-                        </div>
-                    </motion.div>
-                ))}
-            </AnimatePresence>
         </div>
       </main>
 
-      {/* 4. RIGHT SIDEBAR */}
-      <div className={`fixed right-0 top-12 bottom-16 transition-all duration-500 ease-spring pointer-events-auto z-[55] ${isRightSidebarOpen ? 'w-80 translate-x-0' : 'w-0 translate-x-full'}`}>
-           <div className="h-full flex flex-col glass-panel border-l border-y border-border shadow-2xl my-2 ml-2 rounded-l-xl">
-              <div className="h-9 bg-muted/40 border-b border-border flex items-center justify-between px-3">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Kernel Stream</span>
-                  <button onClick={() => setIsRightSidebarOpen(false)} className="hover:text-foreground text-muted-foreground">
-                      <ChevronRight className="w-4 h-4" />
-                  </button>
-              </div>
+      {/* Right Sidebar (Thought Stream) - Hidden in Focus Mode */}
+      <div className={`fixed right-0 top-[48px] bottom-[90px] transition-all duration-500 z-[40] ${isRightSidebarOpen && !ui.focusMode ? 'w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 pointer-events-none'}`}>
+           <div className="h-full flex flex-col glass-panel border-r-0 border-y-0 border-l border-border/50 backdrop-blur-xl">
               <ThoughtStream />
            </div>
       </div>
 
-      {!isRightSidebarOpen && (
-          <button onClick={() => setIsRightSidebarOpen(true)} className="fixed right-0 top-1/2 -translate-y-1/2 z-[55] p-1.5 bg-background/80 border-l border-t border-b border-border rounded-l-lg backdrop-blur-md shadow-lg hover:pr-3 transition-all">
+      {!isRightSidebarOpen && !ui.focusMode && (
+          <button onClick={() => setIsRightSidebarOpen(true)} className="fixed right-0 top-1/2 -translate-y-1/2 z-[40] p-1.5 bg-card border border-border rounded-l-lg hover:pr-3 transition-all shadow-lg">
               <ChevronLeft className="w-4 h-4 text-muted-foreground" />
           </button>
       )}
       
-      {/* 5. SLIM BOTTOM DOCK */}
       <StatusBar />
     </div>
   );
