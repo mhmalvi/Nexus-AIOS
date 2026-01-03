@@ -6,7 +6,7 @@ import { useStore } from "../../context/StoreContext";
 import { NexusPulse } from "../ui/NexusPulse";
 
 export function GhostCommandBar() {
-  const { isGhostBarOpen, setGhostBarOpen, addMessage, addToHistory, agent } = useStore();
+  const { isGhostBarOpen, setGhostBarOpen, addMessage, addToHistory, agent, spawnArtifact, setFocusMode } = useStore();
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -34,12 +34,32 @@ export function GhostCommandBar() {
 
   const handleSubmit = (cmd: string = input) => {
     if (!cmd.trim()) return;
-    addMessage({
-      id: Date.now().toString(),
-      role: 'user',
-      content: cmd,
-      timestamp: new Date()
-    });
+
+    // Detect Intent for UI Demo purposes
+    if (cmd.toLowerCase().includes("artifact") || cmd.toLowerCase().includes("create")) {
+        setFocusMode(false); // Ensure we can see the artifact
+        spawnArtifact({
+            id: Date.now().toString(),
+            title: "Generated Component",
+            type: "code",
+            content: `// Dynamic Artifact Generated via Intent\nfunction NexusComponent() {\n  return <div className="glass-panel">Artifact Loaded</div>\n}`,
+            isVisible: true
+        });
+        addMessage({
+            id: Date.now().toString(),
+            role: 'system',
+            content: `Ghost Intent: Spawning new artifact on desktop layer.`,
+            timestamp: new Date()
+        });
+    } else {
+        addMessage({
+            id: Date.now().toString(),
+            role: 'user',
+            content: cmd,
+            timestamp: new Date()
+        });
+    }
+
     addToHistory(cmd);
     setGhostBarOpen(false);
   };

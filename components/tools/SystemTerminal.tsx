@@ -11,7 +11,7 @@ interface TerminalLine {
 }
 
 export function SystemTerminal() {
-    const { addThought, agent } = useStore();
+    const { addThought, agent, spawnArtifact, setFocusMode } = useStore();
     const [history, setHistory] = useState<TerminalLine[]>([
         { type: 'system', content: 'Nexus Kernel v3.1.0-generic [x86_64]', timestamp: new Date() },
         { type: 'system', content: 'Type "help" for available commands.', timestamp: new Date() }
@@ -66,6 +66,24 @@ Available commands:
 Documents/    Downloads/    Projects/    
 nexus.config.js    README.md    kernel.log    agent_manifest.json
 `, timestamp: new Date() };
+                break;
+            case 'cat':
+                if (args[1] === 'README.md' || args[1] === 'nexus.config.js' || args[1] === 'agent_manifest.json') {
+                    // Trigger Artifact
+                    setFocusMode(false);
+                    spawnArtifact({
+                        id: `file-${Date.now()}`,
+                        title: args[1],
+                        type: 'code',
+                        content: `// Content of ${args[1]}\n{\n  "system": "Nexus AIOS",\n  "version": "3.1.0",\n  "status": "stable"\n}`,
+                        isVisible: true
+                    });
+                    output = { type: 'system', content: `>> Spawning artifact view for ${args[1]}...`, timestamp: new Date() };
+                } else if (args[1]) {
+                     output = { type: 'error', content: `cat: ${args[1]}: No such file or directory`, timestamp: new Date() };
+                } else {
+                     output = { type: 'error', content: `usage: cat [file]`, timestamp: new Date() };
+                }
                 break;
             case 'whoami':
                 output = { type: 'output', content: 'developer', timestamp: new Date() };

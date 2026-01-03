@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
 import { VoiceIndicator } from './components/voice/VoiceIndicator';
 import { HILModal } from './components/agent/ActionApproval';
+import { GhostCommandBar } from './components/command/GhostCommandBar';
 import { useStore } from './context/StoreContext';
 import { mockTauri } from './services/mockTauri';
 
@@ -87,6 +88,7 @@ function App() {
   return (
     <>
       <MainLayout />
+      <GhostCommandBar />
       <VoiceIndicator 
         isListening={agent.isListening}
         transcript={agent.transcript}

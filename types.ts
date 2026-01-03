@@ -83,8 +83,10 @@ export interface WindowState {
   isOpen: boolean;
   isMinimized: boolean;
   isMaximized: boolean;
+  isAlwaysOnTop?: boolean;
   snap?: 'left' | 'right' | 'top' | null;
   position?: { x: number; y: number };
+  size?: { width: number; height: number };
   zIndex: number;
 }
 

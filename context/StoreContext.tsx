@@ -27,8 +27,11 @@ interface StoreContextType extends AppState {
   closeWindow: (id: string) => void;
   minimizeWindow: (id: string) => void;
   maximizeWindow: (id: string) => void;
+  resizeWindow: (id: string, width: number, height: number) => void;
+  moveWindow: (id: string, x: number, y: number) => void;
   snapWindow: (id: string, snap: WindowState['snap']) => void;
   focusWindow: (id: string) => void;
+  toggleAlwaysOnTop: (id: string) => void;
   addNotification: (notification: Omit<Notification, 'id' | 'read' | 'timestamp'>) => void;
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
@@ -103,12 +106,16 @@ const initialState: AppState = {
   pendingAction: null,
   artifacts: [],
   windows: {
-    'chat': { id: 'chat', isOpen: true, isMinimized: false, isMaximized: false, zIndex: 10 },
-    'war-room': { id: 'war-room', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 9 },
-    'memory': { id: 'memory', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 8 },
-    'agents': { id: 'agents', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 7 },
-    'settings': { id: 'settings', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6 },
-    'terminal': { id: 'terminal', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 5 },
+    'chat': { id: 'chat', isOpen: true, isMinimized: false, isMaximized: false, zIndex: 10, position: { x: 80, y: 80 }, size: { width: 450, height: 600 } },
+    'war-room': { id: 'war-room', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 9, position: { x: 250, y: 100 }, size: { width: 900, height: 650 } },
+    'memory': { id: 'memory', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 8, position: { x: 300, y: 120 }, size: { width: 900, height: 650 } },
+    'agents': { id: 'agents', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 7, position: { x: 150, y: 150 }, size: { width: 800, height: 600 } },
+    'files': { id: 'files', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 7, position: { x: 200, y: 200 }, size: { width: 800, height: 500 } },
+    'browser': { id: 'browser', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 100, y: 100 }, size: { width: 900, height: 600 } },
+    'code': { id: 'code', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 120, y: 80 }, size: { width: 900, height: 650 } },
+    'schedule': { id: 'schedule', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 280, y: 150 }, size: { width: 850, height: 600 } },
+    'settings': { id: 'settings', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 400, y: 200 }, size: { width: 600, height: 650 } },
+    'terminal': { id: 'terminal', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 5, position: { x: 100, y: 400 }, size: { width: 700, height: 450 } },
   },
   notifications: [],
   activeWindowId: 'chat'
@@ -136,7 +143,10 @@ type Action =
   | { type: 'UPDATE_ARTIFACT'; payload: { id: string, updates: Partial<Artifact> } }
   | { type: 'CLOSE_ARTIFACT'; payload: string }
   | { type: 'WINDOW_ACTION'; payload: { id: string, action: 'open' | 'close' | 'minimize' | 'maximize' | 'focus' } }
+  | { type: 'WINDOW_RESIZE'; payload: { id: string, width: number, height: number } }
+  | { type: 'WINDOW_MOVE'; payload: { id: string, x: number, y: number } }
   | { type: 'WINDOW_SNAP'; payload: { id: string, snap: WindowState['snap'] } }
+  | { type: 'WINDOW_TOGGLE_ALWAYS_ON_TOP'; payload: { id: string } }
   | { type: 'ADD_NOTIFICATION'; payload: Notification }
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }
   | { type: 'CLEAR_NOTIFICATIONS' }
@@ -207,7 +217,8 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
     case 'WINDOW_ACTION': {
         const { id, action: winAction } = action.payload;
         const windows = { ...state.windows };
-        const maxZ = Math.max(...Object.values(windows).map(w => w.zIndex));
+        // Determine the highest Z currently in use
+        const maxZ = Math.max(0, ...Object.values(windows).map(w => w.zIndex || 0));
         let activeWindowId = state.activeWindowId;
         
         if (!windows[id]) return state; 
@@ -230,11 +241,28 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
                 activeWindowId = id;
                 break;
             case 'focus':
-                windows[id] = { ...windows[id], isMinimized: false, zIndex: maxZ + 1 };
+                // Bring to front if not already
+                if (windows[id].zIndex !== maxZ) {
+                     windows[id] = { ...windows[id], isMinimized: false, zIndex: maxZ + 1 };
+                }
                 activeWindowId = id;
                 break;
         }
         return { ...state, windows, activeWindowId };
+    }
+    case 'WINDOW_RESIZE': {
+        const { id, width, height } = action.payload;
+        const windows = { ...state.windows };
+        if (!windows[id]) return state;
+        windows[id] = { ...windows[id], size: { width, height } };
+        return { ...state, windows };
+    }
+    case 'WINDOW_MOVE': {
+        const { id, x, y } = action.payload;
+        const windows = { ...state.windows };
+        if (!windows[id]) return state;
+        windows[id] = { ...windows[id], position: { x, y } };
+        return { ...state, windows };
     }
     case 'WINDOW_SNAP': {
         const { id, snap } = action.payload;
@@ -246,6 +274,21 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
             snap,
             isMaximized: snap === 'top', // 'top' snap acts as maximize
         };
+        return { ...state, windows };
+    }
+    case 'WINDOW_TOGGLE_ALWAYS_ON_TOP': {
+        const { id } = action.payload;
+        const windows = { ...state.windows };
+        if (!windows[id]) return state;
+        
+        const newState = !windows[id].isAlwaysOnTop;
+        windows[id] = { ...windows[id], isAlwaysOnTop: newState };
+        
+        if (newState) {
+             const maxZ = Math.max(0, ...Object.values(windows).map(w => w.zIndex || 0));
+             windows[id].zIndex = maxZ + 1;
+        }
+        
         return { ...state, windows };
     }
     case 'ADD_NOTIFICATION':
@@ -333,8 +376,11 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     closeWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'close' } }),
     minimizeWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'minimize' } }),
     maximizeWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'maximize' } }),
+    resizeWindow: (id: string, width: number, height: number) => dispatch({ type: 'WINDOW_RESIZE', payload: { id, width, height } }),
+    moveWindow: (id: string, x: number, y: number) => dispatch({ type: 'WINDOW_MOVE', payload: { id, x, y } }),
     snapWindow: (id: string, snap: WindowState['snap']) => dispatch({ type: 'WINDOW_SNAP', payload: { id, snap } }),
     focusWindow: (id: string) => dispatch({ type: 'WINDOW_ACTION', payload: { id, action: 'focus' } }),
+    toggleAlwaysOnTop: (id: string) => dispatch({ type: 'WINDOW_TOGGLE_ALWAYS_ON_TOP', payload: { id } }),
     addNotification: (n: Omit<Notification, 'id' | 'read' | 'timestamp'>) => dispatch({ 
         type: 'ADD_NOTIFICATION', 
         payload: { ...n, id: Date.now().toString(), read: false, timestamp: new Date() } 

@@ -5,11 +5,10 @@ import { useStore } from "../../context/StoreContext";
 import { Button } from "../ui/Button";
 
 export function WarRoom() {
-  const { thoughtStream, addThought } = useStore();
+  const { thoughtStream, addThought, updateAgentStatus } = useStore();
   const [logs, setLogs] = useState<string[]>([]);
   const [ebpfLogs, setEbpfLogs] = useState<string[]>([]);
   const [delegationInput, setDelegationInput] = useState("");
-  const [selectedAgent, setSelectedAgent] = useState<'worker'|'memory'|'scheduler'>('worker');
   const [npuLoad, setNpuLoad] = useState([20, 30, 45, 30, 50, 60, 40, 30, 20]);
   const [activeTab, setActiveTab] = useState<'ops' | 'sys'>('ops');
 
@@ -36,13 +35,32 @@ export function WarRoom() {
 
   const handleDelegate = () => {
     if(!delegationInput.trim()) return;
+    
+    // 1. Add Thought
     addThought({
         id: Date.now().toString(),
         timestamp: new Date(),
         type: 'action',
         component: 'supervisor',
-        content: `DELEGATION COMMAND: Dispatched task "${delegationInput}" to ${selectedAgent.toUpperCase()} agent.`
+        content: `DELEGATION COMMAND: Dispatched task "${delegationInput}" to DEV-ARCH agent.`
     });
+
+    // 2. Update Swarm State (Visual Feedback)
+    updateAgentStatus('dev-arch', {
+        status: 'executing',
+        currentTask: delegationInput,
+        confidence: 100
+    });
+
+    // 3. Reset after timeout
+    setTimeout(() => {
+        updateAgentStatus('dev-arch', {
+            status: 'idle',
+            currentTask: 'Awaiting new spec',
+            confidence: 95
+        });
+    }, 4000);
+
     setDelegationInput("");
   };
 
@@ -133,7 +151,7 @@ export function WarRoom() {
                                 type="text" 
                                 value={delegationInput}
                                 onChange={(e) => setDelegationInput(e.target.value)}
-                                placeholder="Command..."
+                                placeholder="Task for DevArch..."
                                 className="flex-1 bg-muted/30 border border-border rounded px-3 py-2 focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                             />
                             <Button onClick={handleDelegate} size="icon" className="bg-primary hover:bg-primary/90 text-primary-foreground h-full w-10 rounded">

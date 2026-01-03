@@ -1,6 +1,6 @@
 
 import React from "react";
-import { MessageSquare, Layout, Database, Users, Settings, Terminal, Mic } from "lucide-react";
+import { MessageSquare, Layout, Database, Users, Settings, Terminal, Mic, Folder, Globe, FileCode, Calendar } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -10,7 +10,11 @@ export function Dock() {
   const dockItems = [
     { id: 'chat', icon: MessageSquare, label: 'Communicator' },
     { id: 'war-room', icon: Layout, label: 'Mission Control' },
+    { id: 'browser', icon: Globe, label: 'Quantum Browser' },
+    { id: 'code', icon: FileCode, label: 'Code Forge' },
+    { id: 'schedule', icon: Calendar, label: 'Chronos' },
     { id: 'memory', icon: Database, label: 'Memory Core' },
+    { id: 'files', icon: Folder, label: 'Data Grid' },
     { id: 'agents', icon: Users, label: 'Swarm Cluster' },
     { id: 'settings', icon: Settings, label: 'System' },
   ];
