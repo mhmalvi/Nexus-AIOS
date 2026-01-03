@@ -61,6 +61,12 @@ export interface AgentState {
   }>;
 }
 
+export interface VoiceSettings {
+  sensitivity: number; // 0.1 to 2.0
+  responsiveness: number; // 0.1 to 1.0 (smoothing)
+  visualizerColor: 'primary' | 'rainbow' | 'monochrome';
+}
+
 export interface UISettings {
   theme: 'light' | 'dark' | 'system';
   accentColor: string; 
@@ -69,6 +75,7 @@ export interface UISettings {
   animations: boolean;
   showThoughts: boolean;
   focusMode: boolean;
+  voiceSettings: VoiceSettings;
 }
 
 export interface WindowState {

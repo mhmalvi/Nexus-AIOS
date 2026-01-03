@@ -6,52 +6,107 @@ import { Dock } from "./Dock";
 import { ThoughtStream } from "../agent/ThoughtStream";
 import { CommandInput } from "../command/CommandInput";
 import { CommandPalette } from "../command/CommandPalette";
-import { GhostCommandBar } from "../command/GhostCommandBar";
 import { MemoryViewer } from "../agent/MemoryViewer";
 import { WarRoom } from "../agent/WarRoom";
 import { SwarmCluster } from "../agent/SwarmCluster";
+import { SystemTerminal } from "../tools/SystemTerminal";
 import { NotificationCenter } from "./NotificationCenter";
 import { SummaryOverlay } from "./SummaryOverlay";
 import { useStore } from "../../context/StoreContext";
-import { User, Bot, Terminal, Code, Globe, Search, Maximize2, Minimize2, X, Minus, Layout, ChevronRight, ChevronLeft, Layers, Settings, Users } from "lucide-react";
+import { User, Bot, Terminal, Code, Globe, Search, Maximize2, Minimize2, X, Minus, Layout, Layers, Settings, Users } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowState, onClose, onMinimize, onMaximize, onFocus, onSnap, activeWindowId, focusMode, constraintsRef }: any) => {
     if (!windowState || !windowState.isOpen) return null;
+    // In focus mode, strictly only show the active window
     if (focusMode && activeWindowId !== id) return null;
 
-    // Adjusted TOP_OFFSET for 36px header + buffer
-    const TOP_OFFSET = 42;
+    // Adjusted offsets
+    const HEADER_HEIGHT = 40; 
     
     const initialX = id === 'chat' ? 80 : 250;
     const initialY = id === 'chat' ? 80 : 100;
 
+    // Define the target animation state based on window mode
     let targetAnim: any = {
         opacity: windowState.isMinimized ? 0 : 1,
         scale: windowState.isMinimized ? 0.8 : 1,
         filter: windowState.isMinimized ? "blur(20px)" : "blur(0px)",
+        borderRadius: "12px",
     };
 
     if (focusMode) {
-         targetAnim = { ...targetAnim, top: '50%', left: '50%', x: '-50%', y: '-50%', width: width, height: height, position: 'fixed', zIndex: 100 };
-    } else if (windowState.isMaximized) {
-        // Full screen (minus header), flush to edges and bottom
-        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 0, right: 0, bottom: 0, width: 'auto', height: 'auto', borderRadius: 0 };
+         // ZEN MODE: Centered, large, focused
+         targetAnim = { 
+             ...targetAnim, 
+             top: '50%', 
+             left: '50%', 
+             x: '-50%', 
+             y: '-50%', 
+             width: '90vw', 
+             height: '90vh', 
+             position: 'fixed', 
+             zIndex: 100,
+             borderRadius: '16px',
+             boxShadow: '0 0 0 100vmax rgba(0,0,0,0.85)' // Dim everything else
+         };
+    } else if (windowState.isMaximized || windowState.snap === 'top') {
+        // MAXIMIZED / TOP SNAP: Fill workspace minus header
+        targetAnim = { 
+            ...targetAnim, 
+            top: HEADER_HEIGHT + 10, 
+            left: 10, 
+            right: 10, 
+            bottom: 10, 
+            width: 'calc(100vw - 20px)', 
+            height: 'calc(100vh - 60px)', // Account for header + margin
+            borderRadius: '8px',
+            x: 0, y: 0 
+        };
     } else if (windowState.snap === 'left') {
-        targetAnim = { ...targetAnim, top: TOP_OFFSET, left: 0, bottom: 0, width: '50%', height: 'auto', borderRadius: 0 };
+        // LEFT SPLIT
+        targetAnim = { 
+            ...targetAnim, 
+            top: HEADER_HEIGHT + 10, 
+            left: 10, 
+            width: 'calc(50vw - 15px)', 
+            height: 'calc(100vh - 60px)', 
+            borderRadius: '8px',
+            x: 0, y: 0
+        };
     } else if (windowState.snap === 'right') {
-        targetAnim = { ...targetAnim, top: TOP_OFFSET, right: 0, bottom: 0, width: '50%', height: 'auto', left: 'auto', borderRadius: 0 };
+        // RIGHT SPLIT
+        targetAnim = { 
+            ...targetAnim, 
+            top: HEADER_HEIGHT + 10, 
+            left: '50%', 
+            width: 'calc(50vw - 15px)', 
+            height: 'calc(100vh - 60px)', 
+            borderRadius: '8px',
+            x: 5, y: 0 // Small offset for gap
+        };
     }
 
     const handleDragEnd = (event: any, info: any) => {
         if (focusMode) return;
-        const x = info.point.x;
-        const y = info.point.y;
+        
+        const x = event.clientX;
+        const y = event.clientY;
         const screenW = window.innerWidth;
-        if (x < 30) onSnap(id, 'left');
-        else if (x > screenW - 30) onSnap(id, 'right');
-        else if (y < 60) onMaximize(id); 
-        else if (windowState.snap || windowState.isMaximized) onSnap(id, null);
+        const SNAP_THRESHOLD = 50;
+
+        // Reset if dragging happens (though dragging is usually disabled when snapped)
+        // This handles the drop logic
+        if (y < SNAP_THRESHOLD) {
+            onSnap(id, 'top');
+        } else if (x < SNAP_THRESHOLD) {
+            onSnap(id, 'left');
+        } else if (x > screenW - SNAP_THRESHOLD) {
+            onSnap(id, 'right');
+        } else if (windowState.snap || windowState.isMaximized) {
+            // If we were snapped and dragged away (if enabled), unsnap
+            onSnap(id, null);
+        }
     };
 
     return (
@@ -67,7 +122,7 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
             dragElastic={0.05}
             onDragEnd={handleDragEnd}
             transition={{
-                layout: { type: "spring", stiffness: 350, damping: 30 },
+                layout: { type: "spring", stiffness: 300, damping: 28 },
                 opacity: { duration: 0.2 }
             }}
             className={`absolute flex flex-col glass-panel shadow-2xl overflow-hidden
@@ -77,6 +132,7 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
             `}
             style={{ 
                 zIndex: windowState.zIndex,
+                // Apply manual positioning only if not snapped/maximized/focused
                 left: (!windowState.snap && !windowState.isMaximized && !focusMode) ? initialX : undefined,
                 top: (!windowState.snap && !windowState.isMaximized && !focusMode) ? initialY : undefined,
                 width: (!windowState.snap && !windowState.isMaximized && !focusMode) ? width : undefined,
@@ -90,7 +146,7 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
                     className={`h-10 shrink-0 flex items-center justify-between px-3 select-none border-b border-border/50
                         ${activeWindowId === id ? 'bg-secondary/40' : 'bg-secondary/10'}
                     `}
-                    onDoubleClick={() => onMaximize(id)}
+                    onDoubleClick={() => onSnap(id, windowState.isMaximized ? null : 'top')}
                 >
                     <div className="flex items-center gap-3 text-xs font-bold tracking-wide text-foreground/80">
                         <Icon className="w-3.5 h-3.5 opacity-70" />
@@ -99,13 +155,24 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
                     
                     <div className="flex items-center gap-2 z-50" onPointerDown={(e) => e.stopPropagation()}>
                         <button onClick={() => onMinimize(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"><Minus className="w-3 h-3" /></button>
-                        <button onClick={() => onMaximize(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
+                        <button onClick={() => onSnap(id, windowState.isMaximized ? null : 'top')} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
                             {windowState.isMaximized ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
                         </button>
                         <button onClick={() => onClose(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"><X className="w-3 h-3" /></button>
                     </div>
                 </div>
             )}
+            
+            {/* Focus Mode Close Button */}
+            {focusMode && (
+                 <button 
+                    onClick={() => onClose(id)} 
+                    className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 hover:bg-red-500/80 text-white transition-colors"
+                 >
+                    <X className="w-5 h-5" />
+                 </button>
+            )}
+
             <div className="flex-1 overflow-hidden relative bg-background/40 backdrop-blur-sm" onPointerDown={(e) => e.stopPropagation()}>
                 {children}
             </div>
@@ -114,13 +181,12 @@ const WindowFrame = ({ id, title, icon: Icon, children, width, height, windowSta
 };
 
 export function MainLayout() {
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   
   const { 
       activeConversation, artifacts, closeArtifact, windows, closeWindow, minimizeWindow, maximizeWindow, focusWindow, 
-      ui, setAccentColor, activeWindowId, setCommandPaletteOpen, openWindow, snapWindow
+      ui, setAccentColor, activeWindowId, setCommandPaletteOpen, openWindow, snapWindow, setVoiceSettings
   } = useStore();
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -132,10 +198,6 @@ export function MainLayout() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-        if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-            e.preventDefault();
-            setIsRightSidebarOpen(prev => !prev);
-        }
         if ((e.metaKey || e.ctrlKey) && e.key === '/') {
             e.preventDefault();
             openWindow('settings'); 
@@ -172,11 +234,11 @@ export function MainLayout() {
          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 blur-[120px] rounded-full dark:opacity-30" />
          <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[100px] rounded-full dark:opacity-20" />
          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.02]" />
-         {ui.focusMode && <div className="absolute inset-0 bg-background/80 backdrop-blur-sm transition-all duration-700" />}
+         {/* Focus Mode Overlay */}
+         {ui.focusMode && <div className="absolute inset-0 bg-background/95 backdrop-blur-md transition-all duration-700 z-[90]" />}
       </div>
 
       <CommandPalette />
-      <GhostCommandBar />
       <NotificationCenter isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
       <SummaryOverlay isOpen={isSummaryOpen} onClose={() => setIsSummaryOpen(false)} activeWindowId={activeWindowId} />
       
@@ -191,10 +253,10 @@ export function MainLayout() {
         <div className="relative w-full h-full">
             {/* Ambient Artifacts (Canvas Mode) */}
             <AnimatePresence>
-                {artifacts.map((artifact, i) => (
+                {!ui.focusMode && artifacts.map((artifact, i) => (
                     <motion.div 
                         key={artifact.id}
-                        drag={!ui.focusMode}
+                        drag
                         dragConstraints={constraintsRef}
                         dragMomentum={false}
                         whileDrag={{ scale: 1.05, cursor: 'grabbing', zIndex: 100 }}
@@ -202,9 +264,7 @@ export function MainLayout() {
                         animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
                         exit={{ opacity: 0, scale: 0.8 }}
                         transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                        className={`absolute rounded-2xl overflow-hidden glass-panel shadow-2xl z-[60]
-                            ${ui.focusMode ? 'grayscale opacity-20 hover:grayscale-0 hover:opacity-100 transition-all' : ''}
-                        `}
+                        className={`absolute rounded-2xl overflow-hidden glass-panel shadow-2xl z-[60]`}
                         style={{
                             top: `${15 + (i * 5)}%`,
                             left: `${35 + (i * 4)}%`,
@@ -316,23 +376,83 @@ export function MainLayout() {
                             </div>
                         </div>
                     </section>
+                    
+                    <section>
+                        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Voice Interface</h3>
+                        <div className="space-y-4">
+                             <div className="bg-card/50 p-4 rounded-lg border border-border space-y-6">
+                                <div className="flex items-start gap-4">
+                                     <div className="p-2 bg-muted rounded-lg">
+                                         {/* Mic Icon moved to voice indicator context, purely settings here */}
+                                         <Settings className="w-5 h-5 text-muted-foreground" />
+                                     </div>
+                                     <div className="flex-1 space-y-4">
+                                         <div>
+                                            <div className="flex justify-between mb-2">
+                                                <span className="text-sm font-medium">Mic Sensitivity</span>
+                                                <span className="text-xs text-muted-foreground">{(ui.voiceSettings?.sensitivity || 1).toFixed(1)}x</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="0.1" max="2.0" step="0.1"
+                                                value={ui.voiceSettings?.sensitivity || 1}
+                                                onChange={(e) => setVoiceSettings({ sensitivity: parseFloat(e.target.value) })}
+                                                className="w-full accent-primary h-1 bg-muted rounded-lg appearance-none cursor-pointer"
+                                            />
+                                         </div>
+
+                                         <div>
+                                            <div className="flex justify-between mb-2">
+                                                <span className="text-sm font-medium">Visualizer Smoothness</span>
+                                                <span className="text-xs text-muted-foreground">{(ui.voiceSettings?.responsiveness || 0.5).toFixed(1)}</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="0.1" max="1.0" step="0.1"
+                                                value={ui.voiceSettings?.responsiveness || 0.5}
+                                                onChange={(e) => setVoiceSettings({ responsiveness: parseFloat(e.target.value) })}
+                                                className="w-full accent-primary h-1 bg-muted rounded-lg appearance-none cursor-pointer"
+                                            />
+                                         </div>
+
+                                         <div className="pt-2 border-t border-border">
+                                             <span className="text-sm font-medium block mb-2">Color Mode</span>
+                                             <div className="flex gap-2">
+                                                {['primary', 'rainbow', 'monochrome'].map((mode) => (
+                                                    <button
+                                                        key={mode}
+                                                        onClick={() => setVoiceSettings({ visualizerColor: mode as any })}
+                                                        className={`px-3 py-1.5 rounded text-xs border transition-all ${ui.voiceSettings?.visualizerColor === mode ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/50 border-border hover:border-primary/50'}`}
+                                                    >
+                                                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                                                    </button>
+                                                ))}
+                                             </div>
+                                         </div>
+                                     </div>
+                                </div>
+                             </div>
+                        </div>
+                    </section>
                 </div>
+            </WindowFrame>
+
+            <WindowFrame constraintsRef={constraintsRef} id="terminal" title="System Terminal" icon={Terminal} width="700px" height="450px" windowState={windows['terminal']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                <SystemTerminal />
             </WindowFrame>
 
         </div>
       </main>
 
-      {/* Right Sidebar (Thought Stream) - Hidden in Focus Mode */}
-      <div className={`fixed right-0 top-[36px] bottom-0 transition-all duration-500 z-[40] ${isRightSidebarOpen && !ui.focusMode ? 'w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0 pointer-events-none'}`}>
-           <div className="h-full flex flex-col glass-panel border-r-0 border-y-0 border-l border-border/50 backdrop-blur-xl">
-              <ThoughtStream />
-           </div>
-      </div>
-
-      {!isRightSidebarOpen && !ui.focusMode && (
-          <button onClick={() => setIsRightSidebarOpen(true)} className="fixed right-0 top-1/2 -translate-y-1/2 z-[40] p-1.5 bg-card border border-border rounded-l-lg hover:pr-3 transition-all shadow-lg">
-              <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-          </button>
+      {/* Right Sidebar (Thought Stream) - Hover to Reveal */}
+      {!ui.focusMode && (
+         <div className="fixed right-0 top-[36px] bottom-0 z-[40] flex flex-row-reverse group pointer-events-none">
+             {/* Trigger Zone - always interactable */}
+             <div className="w-4 h-full bg-transparent hover:bg-primary/5 cursor-pointer pointer-events-auto transition-colors z-50" />
+             
+             {/* Sidebar Content - interactable only when 'open' (hovered) */}
+             <div className="w-80 h-full glass-panel border-r-0 border-y-0 border-l border-border/50 backdrop-blur-xl translate-x-full opacity-50 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300 ease-out pointer-events-auto overflow-hidden">
+                 <ThoughtStream />
+             </div>
+         </div>
       )}
       
       <Dock />

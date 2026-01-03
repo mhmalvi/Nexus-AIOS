@@ -1,30 +1,12 @@
 
 import React from "react";
 import { useStore } from "../../context/StoreContext";
-import { Brain, Shield, Code, BarChart3, Activity, GitCommit, CheckCircle, Clock } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Brain, Shield, Code, BarChart3, Activity, GitCommit, Clock } from "lucide-react";
+import { motion } from "framer-motion";
+import { Agent } from "../../types";
 
 export function SwarmCluster() {
   const { swarm } = useStore();
-
-  const getIcon = (avatar: string) => {
-    switch(avatar) {
-      case 'Brain': return <Brain className="w-5 h-5" />;
-      case 'Shield': return <Shield className="w-5 h-5" />;
-      case 'Code': return <Code className="w-5 h-5" />;
-      case 'BarChart': return <BarChart3 className="w-5 h-5" />;
-      default: return <Activity className="w-5 h-5" />;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch(status) {
-      case 'thinking': return 'text-primary bg-primary/10 border-primary/30';
-      case 'executing': return 'text-green-500 bg-green-500/10 border-green-500/30';
-      case 'reviewing': return 'text-orange-500 bg-orange-500/10 border-orange-500/30';
-      default: return 'text-muted-foreground bg-muted/30 border-border';
-    }
-  };
 
   return (
     <div className="h-full bg-background/50 flex flex-col p-6 overflow-hidden relative">
@@ -62,7 +44,12 @@ export function SwarmCluster() {
   );
 }
 
-function AgentCard({ agent, isManager = false }: { agent: any, isManager?: boolean }) {
+interface AgentCardProps {
+  agent: Agent;
+  isManager?: boolean;
+}
+
+const AgentCard: React.FC<AgentCardProps> = ({ agent, isManager = false }) => {
   const isActive = agent.status !== 'idle';
   
   return (
@@ -144,7 +131,7 @@ function AgentCard({ agent, isManager = false }: { agent: any, isManager?: boole
         </div>
     </motion.div>
   );
-}
+};
 
 function getIcon(avatar: string) {
     switch(avatar) {

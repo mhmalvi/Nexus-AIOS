@@ -1,11 +1,12 @@
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Agent } from '../types';
+import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Agent, VoiceSettings } from '../types';
 
 interface StoreContextType extends AppState {
   setTheme: (theme: AppState['ui']['theme']) => void;
   setAccentColor: (color: string) => void;
   setFocusMode: (enabled: boolean) => void;
+  setVoiceSettings: (settings: Partial<VoiceSettings>) => void;
   addToHistory: (command: string) => void;
   addMessage: (message: Message) => void;
   updateMessage: (id: string, content: string) => void;
@@ -82,7 +83,12 @@ const initialState: AppState = {
     sidebarWidth: 240,
     animations: true,
     showThoughts: true,
-    focusMode: false
+    focusMode: false,
+    voiceSettings: {
+        sensitivity: 1.0,
+        responsiveness: 0.5,
+        visualizerColor: 'primary'
+    }
   },
   commandHistory: [],
   activeConversation: [
@@ -102,6 +108,7 @@ const initialState: AppState = {
     'memory': { id: 'memory', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 8 },
     'agents': { id: 'agents', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 7 },
     'settings': { id: 'settings', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6 },
+    'terminal': { id: 'terminal', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 5 },
   },
   notifications: [],
   activeWindowId: 'chat'
@@ -111,6 +118,7 @@ type Action =
   | { type: 'SET_THEME'; payload: AppState['ui']['theme'] }
   | { type: 'SET_ACCENT_COLOR'; payload: string }
   | { type: 'SET_FOCUS_MODE'; payload: boolean }
+  | { type: 'SET_VOICE_SETTINGS'; payload: Partial<VoiceSettings> }
   | { type: 'ADD_HISTORY'; payload: string }
   | { type: 'ADD_MESSAGE'; payload: Message }
   | { type: 'UPDATE_MESSAGE'; payload: { id: string, content: string } }
@@ -144,6 +152,8 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
       return { ...state, ui: { ...state.ui, accentColor: action.payload } };
     case 'SET_FOCUS_MODE':
       return { ...state, ui: { ...state.ui, focusMode: action.payload } };
+    case 'SET_VOICE_SETTINGS':
+      return { ...state, ui: { ...state.ui, voiceSettings: { ...state.ui.voiceSettings, ...action.payload } } };
     case 'ADD_HISTORY':
       if (state.commandHistory[0] === action.payload) return state;
       return { ...state, commandHistory: [action.payload, ...state.commandHistory].slice(0, 99) };
@@ -302,6 +312,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     setTheme: (theme: AppState['ui']['theme']) => dispatch({ type: 'SET_THEME', payload: theme }),
     setAccentColor: (color: string) => dispatch({ type: 'SET_ACCENT_COLOR', payload: color }),
     setFocusMode: (enabled: boolean) => dispatch({ type: 'SET_FOCUS_MODE', payload: enabled }),
+    setVoiceSettings: (settings: Partial<VoiceSettings>) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: settings }),
     addToHistory: (command: string) => dispatch({ type: 'ADD_HISTORY', payload: command }),
     addMessage: (message: Message) => dispatch({ type: 'ADD_MESSAGE', payload: message }),
     updateMessage: (id: string, content: string) => dispatch({ type: 'UPDATE_MESSAGE', payload: { id, content } }),
