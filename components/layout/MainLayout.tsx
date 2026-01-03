@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { Header } from "./Header";
 import { StatusBar } from "./StatusBar";
@@ -14,319 +15,25 @@ import { SettingsPanel } from "../tools/SettingsPanel";
 import { WebBrowser } from "../tools/WebBrowser";
 import { CodeEditor } from "../tools/CodeEditor";
 import { Scheduler } from "../tools/Scheduler";
+import { ModuleManager } from "../tools/ModuleManager";
+import { ImageViewer } from "../tools/ImageViewer";
+import { LockScreen } from "../system/LockScreen";
 import { NotificationCenter } from "./NotificationCenter";
 import { SummaryOverlay } from "./SummaryOverlay";
+import { ContextMenu } from "../ui/ContextMenu";
+import { WindowFrame } from "../system/WindowFrame"; 
 import { useStore } from "../../context/StoreContext";
-import { User, Bot, Terminal, Code, Globe, Search, Maximize2, Minimize2, X, Minus, Layout, Layers, Settings, Users, ArrowDownRight, Pin, Folder, FileCode, Calendar } from "lucide-react";
-import { motion, AnimatePresence, useDragControls, PanInfo } from "framer-motion";
-
-const WindowFrame = ({ id, title, icon: Icon, children, width: defaultWidth, height: defaultHeight, windowState, onClose, onMinimize, onMaximize, onFocus, onSnap, onResize, onMove, onToggleAlwaysOnTop, activeWindowId, focusMode, constraintsRef }: any) => {
-    if (!windowState || !windowState.isOpen) return null;
-    if (focusMode && activeWindowId !== id) return null;
-
-    const HEADER_HEIGHT = 40; 
-    
-    // Position Logic
-    const currentX = windowState.position?.x ?? (id === 'chat' ? 80 : 250);
-    const currentY = windowState.position?.y ?? (id === 'chat' ? 80 : 100);
-    const currentWidth = windowState.size?.width || defaultWidth;
-    const currentHeight = windowState.size?.height || defaultHeight;
-
-    const [isResizing, setIsResizing] = useState(false);
-    const dragControls = useDragControls();
-    const isActive = activeWindowId === id;
-    
-    // Determine if interactive
-    const isDraggable = !windowState.isMaximized && !windowState.snap && !focusMode && !windowState.isMinimized;
-
-    // Resize Logic
-    const handleResizeStart = (direction: 'corner' | 'right' | 'bottom') => (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onFocus(id); 
-        setIsResizing(true);
-
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startWidth = typeof currentWidth === 'string' ? parseInt(currentWidth) : currentWidth;
-        const startHeight = typeof currentHeight === 'string' ? parseInt(currentHeight) : currentHeight;
-
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            if (focusMode || windowState.isMaximized || windowState.snap) return;
-
-            const deltaX = moveEvent.clientX - startX;
-            const deltaY = moveEvent.clientY - startY;
-
-            let newWidth = startWidth;
-            let newHeight = startHeight;
-
-            if (direction === 'right' || direction === 'corner') {
-                newWidth = Math.max(300, startWidth + deltaX);
-            }
-            if (direction === 'bottom' || direction === 'corner') {
-                newHeight = Math.max(200, startHeight + deltaY);
-            }
-
-            onResize(id, newWidth, newHeight);
-        };
-
-        const handleMouseUp = () => {
-            setIsResizing(false);
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    };
-
-    // Calculate Target Animation State based on Window Status
-    const getTargetState = () => {
-        // 1. Minimized
-        if (windowState.isMinimized) {
-            return {
-                position: 'absolute',
-                opacity: 0,
-                scale: 0.5,
-                y: typeof window !== 'undefined' ? window.innerHeight + 200 : 1000,
-                x: currentX, // Maintain X to drop down
-                transition: { duration: 0.4, ease: [0.32, 0.72, 0, 1] }
-            };
-        }
-
-        // 2. Focus Mode (Zen) - Centered
-        if (focusMode) {
-             return { 
-                 position: 'fixed',
-                 x: "-50%", 
-                 y: "-50%",
-                 top: "50%",
-                 left: "50%",
-                 width: "min(90vw, 1200px)", 
-                 height: "min(85vh, 900px)", 
-                 borderRadius: '16px',
-                 boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 100vw rgba(0,0,0,0.5)', // Dim background
-                 scale: 1,
-                 opacity: 1,
-                 zIndex: 9999
-             };
-        } 
-
-        // 3. Snapped / Maximized
-        const screenW = typeof window !== 'undefined' ? window.innerWidth : 1920;
-        const screenH = typeof window !== 'undefined' ? window.innerHeight : 1080;
-        const margin = 8;
-        const snapHeight = screenH - HEADER_HEIGHT - margin * 2;
-
-        if (windowState.isMaximized || windowState.snap === 'top') {
-            return { 
-                position: 'absolute',
-                x: 0, 
-                y: 0,
-                left: margin, 
-                top: HEADER_HEIGHT + margin,
-                width: screenW - (margin * 2), 
-                height: snapHeight, 
-                borderRadius: '8px',
-                scale: 1,
-                opacity: 1,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
-                zIndex: windowState.isAlwaysOnTop ? windowState.zIndex + 2000 : windowState.zIndex
-            };
-        } 
-        
-        if (windowState.snap === 'left') {
-            return { 
-                position: 'absolute',
-                x: 0, 
-                y: 0,
-                left: margin,
-                top: HEADER_HEIGHT + margin,
-                width: (screenW / 2) - (margin * 1.5), 
-                height: snapHeight, 
-                borderRadius: '8px',
-                scale: 1,
-                opacity: 1,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
-                zIndex: windowState.isAlwaysOnTop ? windowState.zIndex + 2000 : windowState.zIndex
-            };
-        } 
-        
-        if (windowState.snap === 'right') {
-            return { 
-                position: 'absolute',
-                x: 0, 
-                y: 0,
-                left: (screenW / 2) + (margin * 0.5),
-                top: HEADER_HEIGHT + margin,
-                width: (screenW / 2) - (margin * 1.5), 
-                height: snapHeight, 
-                borderRadius: '8px',
-                scale: 1,
-                opacity: 1,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.1)",
-                zIndex: windowState.isAlwaysOnTop ? windowState.zIndex + 2000 : windowState.zIndex
-            };
-        }
-
-        // 4. Default Floating State
-        return {
-            position: 'absolute',
-            opacity: 1,
-            scale: 1,
-            x: currentX,
-            y: currentY,
-            left: 0, 
-            top: 0,
-            width: currentWidth,
-            height: currentHeight,
-            borderRadius: "12px",
-            zIndex: windowState.isAlwaysOnTop ? windowState.zIndex + 2000 : windowState.zIndex,
-            boxShadow: isActive 
-                ? "0 20px 50px -12px rgba(0,0,0,0.5), 0 0 0 1px rgba(var(--primary), 0.3)" // Active Glow
-                : "0 4px 12px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.05)",
-            transition: { 
-                type: "spring", 
-                stiffness: 300, 
-                damping: 30 
-            }
-        };
-    };
-
-    const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-        if (isDraggable) {
-            const newX = currentX + info.offset.x;
-            const newY = currentY + info.offset.y;
-            onMove(id, newX, newY);
-            
-            // Snap Logic on Drop
-            const x = info.point.x;
-            const y = info.point.y;
-            const screenW = window.innerWidth;
-            const SNAP_THRESHOLD = 50;
-
-            if (y < SNAP_THRESHOLD) onSnap(id, 'top');
-            else if (x < SNAP_THRESHOLD) onSnap(id, 'left');
-            else if (x > screenW - SNAP_THRESHOLD) onSnap(id, 'right');
-        }
-    };
-
-    return (
-        <motion.div
-            key={id}
-            initial={false}
-            animate={getTargetState()}
-            drag={isDraggable}
-            dragControls={dragControls}
-            dragListener={false} 
-            dragConstraints={constraintsRef}
-            dragMomentum={true}
-            dragTransition={{ power: isActive ? 0.3 : 0.2, timeConstant: isActive ? 250 : 200 }}
-            dragElastic={isActive ? 0.2 : 0.05}
-            onDragStart={() => onFocus(id)}
-            onDragEnd={handleDragEnd}
-            whileDrag={{ 
-                scale: 1.01,
-                zIndex: 9999, // Temp z-index during drag
-                boxShadow: "0 30px 60px -15px rgba(0,0,0,0.5)",
-                cursor: "grabbing"
-            }}
-            onPointerDown={() => onFocus(id)}
-            className={`flex flex-col glass-panel overflow-hidden
-                ${(windowState.snap || windowState.isMaximized || focusMode) ? '' : 'rounded-xl'}
-                ${isActive 
-                    ? 'bg-background/80 backdrop-blur-2xl ring-1 ring-primary/40' 
-                    : 'bg-background/40 backdrop-blur-md border-white/5 opacity-90 hover:opacity-100'}
-                ${focusMode ? 'shadow-2xl !border-none' : ''}
-                ${isResizing ? 'pointer-events-none select-none transition-none' : ''} 
-            `}
-        >
-            {/* Window Header */}
-            {!focusMode && (
-                <div 
-                    className={`h-10 shrink-0 flex items-center justify-between px-3 select-none border-b transition-colors duration-200
-                        ${isActive 
-                            ? 'bg-muted/40 border-primary/10 text-foreground' 
-                            : 'bg-transparent border-border/40 text-muted-foreground'}
-                        cursor-grab active:cursor-grabbing
-                    `}
-                    onPointerDown={(e) => {
-                        onFocus(id);
-                        if(isDraggable) dragControls.start(e);
-                    }}
-                    onDoubleClick={() => onSnap(id, windowState.isMaximized ? null : 'top')}
-                >
-                    <div className="flex items-center gap-3 text-xs font-bold tracking-wide">
-                        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-primary' : 'opacity-70'}`} />
-                        <span className="opacity-90">{title}</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-1.5 z-50" onPointerDown={(e) => e.stopPropagation()}>
-                        <button 
-                            onClick={() => onToggleAlwaysOnTop(id)} 
-                            className={`w-6 h-6 flex items-center justify-center rounded-md transition-colors ${windowState.isAlwaysOnTop ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground'}`}
-                            title="Always on Top"
-                        >
-                            <Pin className="w-3 h-3" />
-                        </button>
-                        <button onClick={() => onMinimize(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground"><Minus className="w-3 h-3" /></button>
-                        <button onClick={() => onSnap(id, windowState.isMaximized ? null : 'top')} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-muted/80 transition-colors text-muted-foreground hover:text-foreground">
-                            {windowState.isMaximized ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-                        </button>
-                        <button onClick={() => onClose(id)} className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"><X className="w-3 h-3" /></button>
-                    </div>
-                </div>
-            )}
-            
-            {/* Focus Mode Close Button */}
-            {focusMode && (
-                 <motion.button 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    onClick={() => onClose(id)} 
-                    className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/40 hover:bg-destructive text-white transition-colors backdrop-blur-md border border-white/10 shadow-lg"
-                 >
-                    <X className="w-5 h-5" />
-                 </motion.button>
-            )}
-
-            {/* Content Area */}
-            <div className={`flex-1 overflow-hidden relative ${isResizing ? 'pointer-events-none' : ''}`} onPointerDown={(e) => e.stopPropagation()}>
-                {/* Dim overlay for inactive windows */}
-                {!isActive && !focusMode && (
-                    <div className="absolute inset-0 bg-background/10 backdrop-blur-[1px] pointer-events-none z-10 transition-all duration-300" />
-                )}
-                {children}
-            </div>
-
-            {/* Resize Handles */}
-            {isDraggable && (
-                <>
-                    {/* Right */}
-                    <div className="absolute top-0 bottom-6 right-0 w-2 cursor-ew-resize hover:bg-primary/20 transition-colors z-40" onMouseDown={handleResizeStart('right')} />
-                    {/* Bottom */}
-                    <div className="absolute bottom-0 left-0 right-6 h-2 cursor-ns-resize hover:bg-primary/20 transition-colors z-40" onMouseDown={handleResizeStart('bottom')} />
-                    
-                    {/* Corner */}
-                    <div 
-                        className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-50 group flex items-end justify-end p-1" 
-                        onMouseDown={handleResizeStart('corner')}
-                    >
-                        <div className={`w-3 h-3 rounded-sm transition-all duration-300 bg-border group-hover:bg-primary group-hover:scale-125 ${isActive ? 'opacity-100' : 'opacity-50'}`} />
-                    </div>
-                </>
-            )}
-        </motion.div>
-    );
-};
+import { User, Bot, Terminal, Code, Globe, Search, Layout, Layers, Settings, Users, Folder, FileCode, Calendar, Package, Image as ImageIcon, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function MainLayout() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{x: number, y: number} | null>(null);
   
   const { 
       activeConversation, artifacts, closeArtifact, windows, closeWindow, minimizeWindow, maximizeWindow, focusWindow, 
-      ui, setAccentColor, activeWindowId, setCommandPaletteOpen, openWindow, snapWindow, setVoiceSettings, resizeWindow, moveWindow, toggleAlwaysOnTop
+      ui, activeWindowId, setCommandPaletteOpen, openWindow, snapWindow, resizeWindow, moveWindow, toggleAlwaysOnTop
   } = useStore();
   
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -347,6 +54,13 @@ export function MainLayout() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [openWindow]);
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (e.target === e.currentTarget || (e.target as HTMLElement).id === "desktop-area") {
+          setContextMenu({ x: e.clientX, y: e.clientY });
+      }
+  };
+
   const getToolIcon = (tool?: string) => {
     switch(tool) {
         case 'terminal': return <Terminal className="w-3 h-3" />;
@@ -357,23 +71,17 @@ export function MainLayout() {
     }
   };
 
-  const colors = [
-      { name: 'Electric Blue', value: '#007AFF' },
-      { name: 'Neon Purple', value: '#BF5AF2' },
-      { name: 'Cyber Green', value: '#32D74B' },
-      { name: 'Alert Orange', value: '#FF9F0A' },
-      { name: 'Crimson Red', value: '#FF3B30' },
-      { name: 'Mono', value: '#71717a' },
-  ];
-
   return (
-    <div className="fixed inset-0 bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-500">
+    <div className="fixed inset-0 bg-background overflow-hidden font-sans text-foreground selection:bg-primary/20 transition-colors duration-500"
+         onContextMenu={handleContextMenu}
+         onClick={() => setContextMenu(null)}
+    >
       
       {/* Dynamic Background */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 blur-[120px] rounded-full dark:opacity-30" />
-         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[100px] rounded-full dark:opacity-20" />
-         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.02]" />
+      <div id="desktop-area" className="absolute inset-0 z-0 pointer-events-auto">
+         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary/10 blur-[120px] rounded-full dark:opacity-30 pointer-events-none" />
+         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 blur-[100px] rounded-full dark:opacity-20 pointer-events-none" />
+         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.02] pointer-events-none" />
          {/* Focus Mode Overlay */}
          <AnimatePresence>
             {ui.focusMode && (
@@ -387,19 +95,26 @@ export function MainLayout() {
          </AnimatePresence>
       </div>
 
+      <LockScreen />
       <CommandPalette />
       <NotificationCenter isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
       <SummaryOverlay isOpen={isSummaryOpen} onClose={() => setIsSummaryOpen(false)} activeWindowId={activeWindowId} />
       
+      <AnimatePresence>
+          {contextMenu && (
+              <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)} />
+          )}
+      </AnimatePresence>
+
       <Header 
           onToggleNotifications={() => setIsNotificationsOpen(!isNotificationsOpen)} 
           onSummarize={() => setIsSummaryOpen(true)}
       />
 
       {/* Main Desktop Area */}
-      <main className="absolute top-0 bottom-0 left-0 right-0 z-10" ref={constraintsRef}>
+      <main className="absolute top-0 bottom-0 left-0 right-0 z-10 pointer-events-none" ref={constraintsRef}>
         
-        <div className="relative w-full h-full">
+        <div className="relative w-full h-full pointer-events-auto">
             {/* Ambient Artifacts (Canvas Mode) */}
             <AnimatePresence>
                 {!ui.focusMode && artifacts.map((artifact, i) => (
@@ -515,6 +230,14 @@ export function MainLayout() {
 
             <WindowFrame constraintsRef={constraintsRef} id="schedule" title="Chronos" icon={Calendar} width={850} height={600} windowState={windows['schedule']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} onResize={resizeWindow} onMove={moveWindow} onToggleAlwaysOnTop={toggleAlwaysOnTop} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
                 <Scheduler />
+            </WindowFrame>
+
+            <WindowFrame constraintsRef={constraintsRef} id="modules" title="Neural Modules" icon={Package} width={800} height={600} windowState={windows['modules']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} onResize={resizeWindow} onMove={moveWindow} onToggleAlwaysOnTop={toggleAlwaysOnTop} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                <ModuleManager />
+            </WindowFrame>
+
+            <WindowFrame constraintsRef={constraintsRef} id="media" title="Holo-Viewer" icon={ImageIcon} width={900} height={700} windowState={windows['media']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} onResize={resizeWindow} onMove={moveWindow} onToggleAlwaysOnTop={toggleAlwaysOnTop} activeWindowId={activeWindowId} focusMode={ui.focusMode}>
+                <ImageViewer />
             </WindowFrame>
 
             <WindowFrame constraintsRef={constraintsRef} id="terminal" title="System Terminal" icon={Terminal} width={700} height={450} windowState={windows['terminal']} onClose={closeWindow} onMinimize={minimizeWindow} onMaximize={maximizeWindow} onFocus={focusWindow} onSnap={snapWindow} onResize={resizeWindow} onMove={moveWindow} onToggleAlwaysOnTop={toggleAlwaysOnTop} activeWindowId={activeWindowId} focusMode={ui.focusMode}>

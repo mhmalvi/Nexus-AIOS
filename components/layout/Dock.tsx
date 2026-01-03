@@ -1,11 +1,13 @@
 
 import React from "react";
-import { MessageSquare, Layout, Database, Users, Settings, Terminal, Mic, Folder, Globe, FileCode, Calendar } from "lucide-react";
+import { MessageSquare, Layout, Database, Users, Settings, Terminal, Mic, Folder, Globe, FileCode, Calendar, Package } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { useSound } from "../../hooks/useSound";
 
 export function Dock() {
-  const { windows, focusWindow, openWindow, activeWindowId, minimizeWindow, ui, setGhostBarOpen, agent, startListening, stopListening } = useStore();
+  const { windows, focusWindow, openWindow, activeWindowId, minimizeWindow, ui, agent, startListening, stopListening } = useStore();
+  const { play } = useSound();
 
   const dockItems = [
     { id: 'chat', icon: MessageSquare, label: 'Communicator' },
@@ -13,6 +15,7 @@ export function Dock() {
     { id: 'browser', icon: Globe, label: 'Quantum Browser' },
     { id: 'code', icon: FileCode, label: 'Code Forge' },
     { id: 'schedule', icon: Calendar, label: 'Chronos' },
+    { id: 'modules', icon: Package, label: 'Neural Modules' },
     { id: 'memory', icon: Database, label: 'Memory Core' },
     { id: 'files', icon: Folder, label: 'Data Grid' },
     { id: 'agents', icon: Users, label: 'Swarm Cluster' },
@@ -20,6 +23,7 @@ export function Dock() {
   ];
 
   const handleAppClick = (id: string) => {
+    play('open');
     if (!windows[id]?.isOpen) {
       openWindow(id);
     } else {
@@ -32,7 +36,7 @@ export function Dock() {
   };
 
   const handleVoiceToggle = () => {
-    // Visual/Haptic simulation could go here if using the Vibration API
+    play('click');
     if (window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(50);
     }
@@ -56,6 +60,7 @@ export function Dock() {
                     <div key={item.id} className="relative group/icon flex flex-col items-center">
                         <motion.button
                             onClick={() => handleAppClick(item.id)}
+                            onMouseEnter={() => play('hover')}
                             whileHover={{ scale: 1.15, y: -4 }}
                             whileTap={{ scale: 0.9 }}
                             className={`
@@ -93,6 +98,7 @@ export function Dock() {
             <div className="relative group/icon flex flex-col items-center">
                 <motion.button 
                     onClick={handleVoiceToggle}
+                    onMouseEnter={() => play('hover')}
                     whileHover={{ scale: 1.15, y: -4 }}
                     whileTap={{ scale: 0.9 }}
                     className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300 relative overflow-hidden
@@ -120,6 +126,7 @@ export function Dock() {
             <div className="relative group/icon flex flex-col items-center">
                 <motion.button 
                     onClick={() => handleAppClick('terminal')}
+                    onMouseEnter={() => play('hover')}
                     whileHover={{ scale: 1.15, y: -4 }}
                     whileTap={{ scale: 0.9 }}
                     className={`

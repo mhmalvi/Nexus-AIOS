@@ -1,9 +1,10 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MainLayout } from './components/layout/MainLayout';
 import { VoiceIndicator } from './components/voice/VoiceIndicator';
 import { HILModal } from './components/agent/ActionApproval';
 import { GhostCommandBar } from './components/command/GhostCommandBar';
+import { BootSequence } from './components/system/BootSequence';
 import { useStore } from './context/StoreContext';
 import { mockTauri } from './services/mockTauri';
 
@@ -17,6 +18,8 @@ function App() {
     updateAgentStatus,
     addNotification
   } = useStore();
+
+  const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     // Subscribe to simulated backend events
@@ -84,6 +87,10 @@ function App() {
       window.addEventListener('keydown', handleKey);
       return () => window.removeEventListener('keydown', handleKey);
   }, []);
+
+  if (!booted) {
+      return <BootSequence onComplete={() => setBooted(true)} />;
+  }
 
   return (
     <>

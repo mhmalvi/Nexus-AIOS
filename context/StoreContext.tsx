@@ -1,11 +1,12 @@
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Agent, VoiceSettings } from '../types';
+import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Agent, VoiceSettings, Asset } from '../types';
 
 interface StoreContextType extends AppState {
   setTheme: (theme: AppState['ui']['theme']) => void;
   setAccentColor: (color: string) => void;
   setFocusMode: (enabled: boolean) => void;
+  setLocked: (locked: boolean) => void;
   setVoiceSettings: (settings: Partial<VoiceSettings>) => void;
   addToHistory: (command: string) => void;
   addMessage: (message: Message) => void;
@@ -36,6 +37,7 @@ interface StoreContextType extends AppState {
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
   updateAgentStatus: (id: string, updates: Partial<Agent>) => void;
+  setSelectedAsset: (asset: Asset | null) => void;
   thoughtStream: ThoughtEvent[];
   isCommandPaletteOpen: boolean;
   isGhostBarOpen: boolean;
@@ -87,6 +89,7 @@ const initialState: AppState = {
     animations: true,
     showThoughts: true,
     focusMode: false,
+    isLocked: true,
     voiceSettings: {
         sensitivity: 1.0,
         responsiveness: 0.5,
@@ -114,17 +117,21 @@ const initialState: AppState = {
     'browser': { id: 'browser', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 100, y: 100 }, size: { width: 900, height: 600 } },
     'code': { id: 'code', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 120, y: 80 }, size: { width: 900, height: 650 } },
     'schedule': { id: 'schedule', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 280, y: 150 }, size: { width: 850, height: 600 } },
+    'modules': { id: 'modules', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 350, y: 180 }, size: { width: 800, height: 600 } },
+    'media': { id: 'media', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 20, position: { x: 150, y: 100 }, size: { width: 900, height: 700 } },
     'settings': { id: 'settings', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 6, position: { x: 400, y: 200 }, size: { width: 600, height: 650 } },
     'terminal': { id: 'terminal', isOpen: false, isMinimized: false, isMaximized: false, zIndex: 5, position: { x: 100, y: 400 }, size: { width: 700, height: 450 } },
   },
   notifications: [],
-  activeWindowId: 'chat'
+  activeWindowId: 'chat',
+  selectedAsset: null,
 };
 
 type Action =
   | { type: 'SET_THEME'; payload: AppState['ui']['theme'] }
   | { type: 'SET_ACCENT_COLOR'; payload: string }
   | { type: 'SET_FOCUS_MODE'; payload: boolean }
+  | { type: 'SET_LOCKED'; payload: boolean }
   | { type: 'SET_VOICE_SETTINGS'; payload: Partial<VoiceSettings> }
   | { type: 'ADD_HISTORY'; payload: string }
   | { type: 'ADD_MESSAGE'; payload: Message }
@@ -150,7 +157,8 @@ type Action =
   | { type: 'ADD_NOTIFICATION'; payload: Notification }
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }
   | { type: 'CLEAR_NOTIFICATIONS' }
-  | { type: 'UPDATE_AGENT'; payload: { id: string, updates: Partial<Agent> } };
+  | { type: 'UPDATE_AGENT'; payload: { id: string, updates: Partial<Agent> } }
+  | { type: 'SET_SELECTED_ASSET'; payload: Asset | null };
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
@@ -162,6 +170,8 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
       return { ...state, ui: { ...state.ui, accentColor: action.payload } };
     case 'SET_FOCUS_MODE':
       return { ...state, ui: { ...state.ui, focusMode: action.payload } };
+    case 'SET_LOCKED':
+      return { ...state, ui: { ...state.ui, isLocked: action.payload } };
     case 'SET_VOICE_SETTINGS':
       return { ...state, ui: { ...state.ui, voiceSettings: { ...state.ui.voiceSettings, ...action.payload } } };
     case 'ADD_HISTORY':
@@ -304,6 +314,8 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
                 agent.id === action.payload.id ? { ...agent, ...action.payload.updates } : agent
             )
         };
+    case 'SET_SELECTED_ASSET':
+        return { ...state, selectedAsset: action.payload };
     default:
       return state;
   }
@@ -355,6 +367,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     setTheme: (theme: AppState['ui']['theme']) => dispatch({ type: 'SET_THEME', payload: theme }),
     setAccentColor: (color: string) => dispatch({ type: 'SET_ACCENT_COLOR', payload: color }),
     setFocusMode: (enabled: boolean) => dispatch({ type: 'SET_FOCUS_MODE', payload: enabled }),
+    setLocked: (locked: boolean) => dispatch({ type: 'SET_LOCKED', payload: locked }),
     setVoiceSettings: (settings: Partial<VoiceSettings>) => dispatch({ type: 'SET_VOICE_SETTINGS', payload: settings }),
     addToHistory: (command: string) => dispatch({ type: 'ADD_HISTORY', payload: command }),
     addMessage: (message: Message) => dispatch({ type: 'ADD_MESSAGE', payload: message }),
@@ -388,6 +401,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     markNotificationRead: (id: string) => dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id }),
     clearNotifications: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
     updateAgentStatus: (id: string, updates: Partial<Agent>) => dispatch({ type: 'UPDATE_AGENT', payload: { id, updates } }),
+    setSelectedAsset: (asset: Asset | null) => dispatch({ type: 'SET_SELECTED_ASSET', payload: asset }),
   };
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

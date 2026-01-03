@@ -75,6 +75,7 @@ export interface UISettings {
   animations: boolean;
   showThoughts: boolean;
   focusMode: boolean;
+  isLocked: boolean;
   voiceSettings: VoiceSettings;
 }
 
@@ -107,6 +108,14 @@ export interface SearchResult {
   action: () => void;
 }
 
+export interface Asset {
+    id: string;
+    name: string;
+    url: string;
+    type: 'image' | 'video' | 'audio' | 'unknown';
+    metadata?: Record<string, any>;
+}
+
 export interface AppState {
   agent: AgentState;
   swarm: Agent[];
@@ -118,4 +127,5 @@ export interface AppState {
   windows: Record<string, WindowState>;
   notifications: Notification[];
   activeWindowId: string | null;
+  selectedAsset: Asset | null;
 }

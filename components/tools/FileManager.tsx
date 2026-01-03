@@ -49,7 +49,7 @@ const mockFileSystem: Record<string, FileSystemItem[]> = {
 };
 
 export function FileManager() {
-  const { spawnArtifact, setFocusMode } = useStore();
+  const { spawnArtifact, setFocusMode, setSelectedAsset, openWindow } = useStore();
   const [currentPath, setCurrentPath] = useState('/home');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
@@ -83,8 +83,24 @@ export function FileManager() {
           const newPath = currentPath === '/' ? `/${item.name}` : `${currentPath}/${item.name}`;
           setCurrentPath(newPath);
           setSelectedItem(null);
+      } else if (item.fileType === 'image') {
+          // Open in dedicated Image Viewer
+          setFocusMode(false);
+          setSelectedAsset({
+              id: `img-${Date.now()}`,
+              name: item.name,
+              url: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=1000&auto=format&fit=crop', // Mock URL
+              type: 'image',
+              metadata: {
+                  size: item.size,
+                  width: 3840,
+                  height: 2160,
+                  type: 'PNG'
+              }
+          });
+          openWindow('media');
       } else {
-          // Open File Preview
+          // Open File Preview Artifact
           setFocusMode(false);
           spawnArtifact({
               id: `file-${item.name}-${Date.now()}`,
