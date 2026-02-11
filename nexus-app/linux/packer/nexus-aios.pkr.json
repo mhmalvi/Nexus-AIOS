@@ -1,0 +1,140 @@
+{
+    "variables": {
+        "nexus_version": "1.0.0",
+        "vm_name": "nexus-aios",
+        "disk_size": "40960",
+        "memory": "8192",
+        "cpus": "4",
+        "iso_url": "",
+        "iso_checksum": "",
+        "ssh_username": "nexus",
+        "ssh_password": "nexus"
+    },
+    "description": "Nexus AIOS VM builder using Packer. Requires a pre-built Nexus AIOS ISO (from build-iso.sh) or an Arch Linux ISO. Set iso_url to your ISO path.",
+    "builders": [
+        {
+            "type": "vmware-iso",
+            "vm_name": "{{user `vm_name`}}-{{user `nexus_version`}}",
+            "guest_os_type": "other5xlinux-64",
+            "iso_url": "{{user `iso_url`}}",
+            "iso_checksum": "{{user `iso_checksum`}}",
+            "disk_size": "{{user `disk_size`}}",
+            "memory": "{{user `memory`}}",
+            "cpus": "{{user `cpus`}}",
+            "ssh_username": "{{user `ssh_username`}}",
+            "ssh_password": "{{user `ssh_password`}}",
+            "ssh_timeout": "30m",
+            "ssh_handshake_attempts": 20,
+            "shutdown_command": "sudo shutdown -P now",
+            "output_directory": "output-{{user `vm_name`}}",
+            "headless": false,
+            "boot_wait": "30s",
+            "boot_command": [
+                "<enter><wait60>",
+                "root<enter><wait5>",
+                "passwd<enter>root<enter>root<enter><wait2>",
+                "systemctl start sshd<enter><wait3>",
+                "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config<enter>",
+                "systemctl restart sshd<enter><wait3>"
+            ],
+            "vmx_data": {
+                "ethernet0.virtualDev": "vmxnet3",
+                "firmware": "efi"
+            }
+        },
+        {
+            "type": "virtualbox-iso",
+            "vm_name": "{{user `vm_name`}}-{{user `nexus_version`}}",
+            "guest_os_type": "ArchLinux_64",
+            "iso_url": "{{user `iso_url`}}",
+            "iso_checksum": "{{user `iso_checksum`}}",
+            "disk_size": "{{user `disk_size`}}",
+            "memory": "{{user `memory`}}",
+            "cpus": "{{user `cpus`}}",
+            "ssh_username": "{{user `ssh_username`}}",
+            "ssh_password": "{{user `ssh_password`}}",
+            "ssh_timeout": "30m",
+            "shutdown_command": "sudo shutdown -P now",
+            "output_directory": "output-{{user `vm_name`}}-vbox",
+            "headless": false,
+            "boot_wait": "30s",
+            "boot_command": [
+                "<enter><wait60>",
+                "root<enter><wait5>",
+                "passwd<enter>root<enter>root<enter><wait2>",
+                "systemctl start sshd<enter><wait3>"
+            ],
+            "hard_drive_interface": "sata",
+            "guest_additions_mode": "disable",
+            "vboxmanage": [
+                [
+                    "modifyvm",
+                    "{{.Name}}",
+                    "--firmware",
+                    "efi"
+                ]
+            ]
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "inline": [
+                "# Partition and install Arch to disk",
+                "parted -s /dev/sda mklabel gpt",
+                "parted -s /dev/sda mkpart primary fat32 1MiB 513MiB",
+                "parted -s /dev/sda set 1 esp on",
+                "parted -s /dev/sda mkpart primary ext4 513MiB 100%",
+                "mkfs.fat -F32 /dev/sda1",
+                "mkfs.ext4 -F /dev/sda2",
+                "mount /dev/sda2 /mnt",
+                "mkdir -p /mnt/boot/efi",
+                "mount /dev/sda1 /mnt/boot/efi",
+                "pacstrap /mnt base linux linux-firmware python python-pip python-virtualenv networkmanager openssh git curl wget dbus htop neofetch portaudio grub efibootmgr base-devel",
+                "genfstab -U /mnt >> /mnt/etc/fstab",
+                "arch-chroot /mnt bash -c 'ln -sf /usr/share/zoneinfo/UTC /etc/localtime && hwclock --systohc'",
+                "arch-chroot /mnt bash -c 'echo en_US.UTF-8 UTF-8 >> /etc/locale.gen && locale-gen && echo LANG=en_US.UTF-8 > /etc/locale.conf'",
+                "echo nexus-aios > /mnt/etc/hostname",
+                "arch-chroot /mnt bash -c 'useradd -m -d /opt/nexus -s /bin/bash -G wheel,video,render nexus && echo nexus:nexus | chpasswd'",
+                "arch-chroot /mnt bash -c 'echo \"nexus ALL=(ALL) NOPASSWD:ALL\" > /etc/sudoers.d/nexus'",
+                "arch-chroot /mnt bash -c 'grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=NexusAIOS && grub-mkconfig -o /boot/grub/grub.cfg'",
+                "arch-chroot /mnt bash -c 'systemctl enable NetworkManager sshd'"
+            ]
+        },
+        {
+            "type": "file",
+            "source": "../../kernel",
+            "destination": "/mnt/opt/nexus/app/kernel"
+        },
+        {
+            "type": "file",
+            "source": "../install.sh",
+            "destination": "/mnt/tmp/nexus-install.sh"
+        },
+        {
+            "type": "shell",
+            "inline": [
+                "arch-chroot /mnt bash /tmp/nexus-install.sh",
+                "rm /mnt/tmp/nexus-install.sh",
+                "# Install Ollama",
+                "arch-chroot /mnt bash -c 'curl -fsSL https://ollama.com/install.sh | sh' || true"
+            ]
+        },
+        {
+            "type": "shell",
+            "inline": [
+                "umount -R /mnt",
+                "reboot"
+            ]
+        }
+    ],
+    "post-processors": [
+        {
+            "type": "checksum",
+            "checksum_types": [
+                "sha256"
+            ],
+            "output": "output-{{user `vm_name`}}/{{user `vm_name`}}-{{user `nexus_version`}}.sha256"
+        }
+    ]
+}

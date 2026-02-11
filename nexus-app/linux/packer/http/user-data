@@ -1,0 +1,51 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  packages:
+    - python3
+    - python3-pip
+    - python3-venv
+    - python3-dev
+    - build-essential
+    - curl
+    - wget
+    - git
+    - libssl-dev
+    - portaudio19-dev
+    - net-tools
+    - htop
+    - openssh-server
+
+  storage:
+    layout:
+      name: lvm
+
+  network:
+    version: 2
+    ethernets:
+      id0:
+        match:
+          name: "en*"
+        dhcp4: true
+      id1:
+        match:
+          name: "eth*"
+        dhcp4: true
+
+  identity:
+    hostname: nexus-aios
+    username: nexus
+    # Password: 'nexus'
+    password: "$6$rounds=4096$nexussalt$KJ3Qr9AK.zQmU8KmFh.djTXhEJTaGFsR5q3z8KIqFvvXRfwCgE8bkAz3z6Md/vYg5U3H5aWzr8QKGqF3Xm.q0"
+
+  ssh:
+    install-server: true
+    allow-pw: true
+
+  late-commands:
+    - echo "nexus ALL=(ALL) NOPASSWD:ALL" > /target/etc/sudoers.d/nexus
+    - chmod 0440 /target/etc/sudoers.d/nexus

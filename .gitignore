@@ -1,0 +1,44 @@
+# Build artifacts
+out/
+work/
+archiso-profile/
+nexus-profile/
+*.iso
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+nexus-app/kernel/venv/
+nexus-app/kernel/.venv/
+*.egg-info/
+dist/
+build/
+
+# Docker
+Dockerfile.nexus
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node
+node_modules/
+.next/
+dist/
+
+# Logs
+*.log
+
+# Temporary
+*.tmp
+*.bak

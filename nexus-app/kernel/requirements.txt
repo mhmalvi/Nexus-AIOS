@@ -1,0 +1,45 @@
+# Nexus Hybrid Kernel - Python Dependencies
+
+# Core LLM Framework
+langchain>=0.1.0
+langchain-ollama>=0.1.0
+
+# Vector Database
+lancedb>=0.4.0
+
+# Async HTTP
+aiohttp>=3.9.0
+
+# Web Scraping (optional)
+beautifulsoup4>=4.12.0
+
+# Voice Pipeline
+faster-whisper>=1.0.0
+openwakeword>=0.6.0
+piper-tts>=1.2.0
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+mcp>=0.1.0
+
+# Development
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# System Monitoring
+psutil>=5.9.0
+
+# Phase 4: Deep Hardware Integration
+# bcc>=0.28.0  # eBPF (Linux only, install via apt: bpfcc-tools)
+openvino>=2023.2.0  # Intel NPU/GPU acceleration
+
+# Phase 4: Federated Learning
+peft>=0.4.0  # LoRA fine-tuning
+zeroconf>=0.50.0  # mDNS peer discovery
+
+# Phase 4: Cross-Device Sync & A2A
+websockets>=12.0  # A2A transport
+cryptography>=41.0.0  # TLS/encryption
