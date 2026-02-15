@@ -1,0 +1,33 @@
+﻿cargo :    Compiling nexus-app v0.1.0 
+(I:\CYBERPUNK\nexus-ag\nexus-app\src-tauri)
+At line:1 char:1
++ cargo check 2>&1 | Out-File -FilePath check_output.txt 
+-Encoding utf8 ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling n 
+   e...-app\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error: failed to run custom build command for `nexus-app 
+v0.1.0 (I:\CYBERPUNK\nexus-ag\nexus-app\src-tauri)`
+
+Caused by:
+  process didn't exit successfully: `I:\CYBERPUNK\nexus-ag\n
+exus-app\src-tauri\target\debug\build\nexus-app-83d43156b7a3
+877f\build-script-build` (exit code: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=TAURI_CONFIG
+  cargo:rustc-check-cfg=cfg(desktop)
+  cargo:rustc-cfg=desktop
+  cargo:rustc-check-cfg=cfg(mobile)
+  cargo:rerun-if-changed=I:\CYBERPUNK\nexus-ag\nexus-app\src
+-tauri\tauri.conf.json
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_APP_NAME=aios
+  
+cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_PREFIX=com_aether
+  cargo:rustc-check-cfg=cfg(dev)
+  failed to read plugin permissions: failed to read file '\\
+?\C:\Users\davin\Downloads\nexus-ag\nexus-app\src-tauri\targ
+et\debug\build\tauri-f1ccf06adafbcdd4\out\permissions\app\au
+togenerated\commands\app_hide.toml': The system cannot find 
+the path specified. (os error 3)

@@ -3,14 +3,19 @@ Nexus Memory Manager - Tiered Memory System
 Coordinates between working, short-term, and long-term memory
 """
 
+import os
+import json
+import logging
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from enum import Enum
 from datetime import datetime, timedelta
 
 from .lancedb_store import LanceDBStore
 from .rag_engine import RAGEngine
 from .context_scheduler import ContextScheduler
+
+logger = logging.getLogger("aether.memory_manager")
 
 
 class MemoryTier(Enum):
@@ -48,11 +53,13 @@ class MemoryManager:
         db_path: str = "./data/lancedb",
         working_memory_limit: int = 10,
         short_term_ttl_hours: int = 24 * 7,  # 1 week
-        embedding_model: str = "nomic-embed-text"
+        embedding_model: str = "nomic-embed-text",
+        session_dir: str = "./data/sessions"
     ):
         self.db_path = db_path
         self.working_memory_limit = working_memory_limit
         self.short_term_ttl = timedelta(hours=short_term_ttl_hours)
+        self.session_dir = session_dir
         
         # Initialize stores
         self.db_store = LanceDBStore(db_path, embedding_model)
@@ -63,6 +70,62 @@ class MemoryManager:
         
         # Working memory (in-session only)
         self.working_memory: List[MemoryEntry] = []
+        
+        # Restore previous session if available
+        self._restore_session()
+    
+    def _restore_session(self):
+        """Restore working memory from the most recent session file."""
+        try:
+            os.makedirs(self.session_dir, exist_ok=True)
+            session_file = os.path.join(self.session_dir, "last_session.json")
+            if os.path.exists(session_file):
+                with open(session_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for item in data.get("working_memory", []):
+                    entry = MemoryEntry(
+                        id=item["id"],
+                        content=item["content"],
+                        tier=MemoryTier(item["tier"]),
+                        metadata=item.get("metadata", {}),
+                        embedding=None,
+                        created_at=datetime.fromisoformat(item["created_at"]),
+                        accessed_at=datetime.fromisoformat(item["accessed_at"]),
+                        access_count=item.get("access_count", 0),
+                        score=item.get("score", 0.0)
+                    )
+                    self.working_memory.append(entry)
+                logger.info("Restored %d entries from last session", len(self.working_memory))
+        except Exception as e:
+            logger.warning("Session restore skipped: %s", e)
+    
+    def sync_session_file(self):
+        """Persist current working memory to a session file on disk."""
+        try:
+            os.makedirs(self.session_dir, exist_ok=True)
+            session_file = os.path.join(self.session_dir, "last_session.json")
+            data = {
+                "saved_at": datetime.utcnow().isoformat(),
+                "working_memory": [
+                    {
+                        "id": e.id,
+                        "content": e.content,
+                        "tier": e.tier.value,
+                        "metadata": e.metadata,
+                        "created_at": e.created_at.isoformat(),
+                        "accessed_at": e.accessed_at.isoformat(),
+                        "access_count": e.access_count,
+                        "score": e.score
+                    }
+                    for e in self.working_memory
+                ]
+            }
+            with open(session_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            logger.info("Session synced: %d entries saved", len(self.working_memory))
+        except Exception as e:
+            logger.warning("Session sync failed: %s", e)
+
     
     async def store(
         self,

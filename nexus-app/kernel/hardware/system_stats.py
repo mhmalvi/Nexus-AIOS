@@ -17,8 +17,13 @@ class SystemStats:
             "release": platform.release(),
             "version": platform.version(),
             "machine": platform.machine(),
-            "processor": platform.processor()
+            "processor": platform.processor(),
+            "boot_time": psutil.boot_time()
         }
+        
+    def get_uptime(self) -> float:
+        import time
+        return time.time() - self.os_info["boot_time"]
         
     def get_cpu_stats(self) -> Dict[str, Any]:
         """Get CPU usage and frequency."""
@@ -81,6 +86,19 @@ class SystemStats:
             pass
         return {"status": "No Battery / Desktop"}
 
+    def get_network_stats(self) -> Dict[str, Any]:
+        """Get Network IO counters."""
+        try:
+            net = psutil.net_io_counters()
+            return {
+                "bytes_sent": net.bytes_sent,
+                "bytes_recv": net.bytes_recv,
+                "packets_sent": net.packets_sent,
+                "packets_recv": net.packets_recv
+            }
+        except Exception:
+            return {"error": "Network stats unavailable"}
+
     def get_top_processes(self, limit: int = 5) -> Dict[str, Any]:
         """Get top running processes by CPU and Memory."""
         try:
@@ -110,10 +128,12 @@ class SystemStats:
         """Get a complete snapshot of system health."""
         return {
             "timestamp": datetime.now().isoformat(),
+            "uptime": self.get_uptime(),
             "os": self.os_info,
             "cpu": self.get_cpu_stats(),
             "memory": self.get_memory_stats(),
             "disk": self.get_disk_stats(),
+            "network": self.get_network_stats(),
             "battery": self.get_battery_stats(),
             "processes": self.get_top_processes()
         }

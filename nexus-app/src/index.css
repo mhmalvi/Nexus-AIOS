@@ -1,0 +1,132 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;200;300;400;500;600&family=Inter:wght@200;300;400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* AetherOS Matte Dark Theme */
+    --background: 240 10% 4%;
+    /* Deep Charcoal/Midnight #09090b */
+    --foreground: 0 0% 95%;
+    /* Soft White #f2f2f2 */
+
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 95%;
+
+    /* Aether Glow (Cool Cyan/White) */
+    --primary: 190 100% 95%;
+    --primary-foreground: 240 10% 4%;
+
+    --secondary: 240 5% 15%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 60%;
+
+    --accent: 240 5% 20%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5% 15%;
+    --input: 240 5% 15%;
+    --ring: 190 50% 50%;
+
+    --radius: 1rem;
+
+    /* Animation Timing */
+    --fade-slow: 1s cubic-bezier(0.16, 1, 0.3, 1);
+    --spring-gentle: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  /* Force Dark Mode Default */
+  .dark {
+    --background: 240 10% 4%;
+    --foreground: 0 0% 95%;
+  }
+
+  /* Light Mode Theme */
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 98%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 10% 95%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 210 10% 92%;
+    --muted-foreground: 210 10% 40%;
+    --accent: 210 10% 90%;
+    --accent-foreground: 240 10% 10%;
+    --border: 210 15% 85%;
+    --input: 210 10% 90%;
+    --ring: 210 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border font-sans antialiased;
+  }
+
+  html {
+    font-family: 'Outfit', 'Inter', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overflow: clip;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-background text-foreground selection:bg-white/10;
+    overflow: clip;
+    overscroll-behavior: none;
+    cursor: default;
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+  }
+
+  .mask-gradient-b {
+    mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+  }
+
+  .mask-gradient-t {
+    mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  }
+
+  .backdrop-blur-aether {
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes fade-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-in-up 0.8s var(--spring-gentle) forwards;
+  }
+}

@@ -12,6 +12,7 @@ Interfaces:
 import asyncio
 import json
 import logging
+import os
 import platform
 import threading
 from typing import Dict, Any, Optional, Callable, Awaitable
@@ -60,24 +61,31 @@ if DBUS_AVAILABLE:
     class NexusAgentInterface(dbus.service.Object):
         """
         org.nexus.Agent interface implementation.
-        
+
         Methods:
         - Query(message, context) -> response, success
         - ExecuteTool(tool_name, args_json) -> result_json, success
         - GetHealth() -> health_json
-        
+
         Signals:
         - AgentEvent(event_type, payload_json)
         - ApprovalRequired(request_id, action, risk_level, details_json)
-        
+
         Properties:
         - Version, IsRunning, ActiveModel
+
+        Security:
+        - On session bus: access is limited to the user's session (D-Bus default)
+        - On system bus: caller UID is verified against the process owner
+        - Privileged methods (ExecuteTool) always validate caller identity
         """
-        
+
         def __init__(self, bus, object_path, kernel=None):
             dbus.service.Object.__init__(self, bus, object_path)
             self.kernel = kernel
             self._is_running = True
+            self._owner_uid = os.getuid() if hasattr(os, 'getuid') else None
+            self._bus = bus
             self._active_model = "llama3.2:3b"
             self._loop = None
             
@@ -97,17 +105,41 @@ if DBUS_AVAILABLE:
             else:
                 # Fallback: create new event loop
                 return asyncio.run(coro)
-        
+
+        def _verify_caller(self, sender):
+            """Verify the D-Bus caller is authorized.
+            On session bus: D-Bus already restricts to the user session.
+            On system bus: verify the caller's UID matches the service owner.
+            Returns True if authorized, raises NexusDBusError otherwise.
+            """
+            if self._owner_uid is None:
+                return True  # Non-Unix platform, skip check
+            try:
+                # Get the caller's Unix UID via D-Bus daemon
+                bus_obj = self._bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+                iface = dbus.Interface(bus_obj, 'org.freedesktop.DBus')
+                caller_uid = iface.GetConnectionUnixUser(sender)
+                if caller_uid != self._owner_uid and caller_uid != 0:
+                    logger.warning(f"D-Bus auth denied: caller UID {caller_uid} != owner UID {self._owner_uid}")
+                    raise NexusDBusError(f"Unauthorized: caller UID {caller_uid}")
+                return True
+            except dbus.DBusException as e:
+                logger.error(f"D-Bus auth check failed: {e}")
+                raise NexusDBusError(f"Auth check failed: {e}")
+
         # ---- Methods ----
         
         @dbus.service.method(
             dbus_interface="org.nexus.Agent",
             in_signature="ss",
-            out_signature="sb"
+            out_signature="sb",
+            sender_keyword="sender"
         )
-        def Query(self, message: str, context: str) -> tuple:
+        def Query(self, message: str, context: str, sender=None) -> tuple:
             """Send a natural language query to Nexus."""
             try:
+                if sender:
+                    self._verify_caller(sender)
                 logger.info(f"D-Bus Query: {message[:50]}...")
                 
                 if not self.kernel:
@@ -147,11 +179,14 @@ if DBUS_AVAILABLE:
         @dbus.service.method(
             dbus_interface="org.nexus.Agent",
             in_signature="ss",
-            out_signature="sb"
+            out_signature="sb",
+            sender_keyword="sender"
         )
-        def ExecuteTool(self, tool_name: str, args_json: str) -> tuple:
+        def ExecuteTool(self, tool_name: str, args_json: str, sender=None) -> tuple:
             """Execute a specific tool."""
             try:
+                if sender:
+                    self._verify_caller(sender)
                 logger.info(f"D-Bus ExecuteTool: {tool_name}")
                 
                 if not self.kernel:
@@ -266,17 +301,19 @@ if DBUS_AVAILABLE:
     class NexusMemoryInterface(dbus.service.Object):
         """
         org.nexus.Memory interface implementation.
-        
+
         Methods:
         - Store(content, tier, metadata_json) -> entry_id
         - Retrieve(query, tier, limit) -> results_json
         - GetStats() -> stats_json
         """
-        
+
         def __init__(self, bus, object_path, memory=None):
             dbus.service.Object.__init__(self, bus, object_path)
             self.memory = memory
             self._loop = None
+            self._owner_uid = os.getuid() if hasattr(os, 'getuid') else None
+            self._bus = bus
             
         def set_memory(self, memory):
             """Set the memory manager reference."""
@@ -294,14 +331,31 @@ if DBUS_AVAILABLE:
             else:
                 return asyncio.run(coro)
         
+        def _verify_caller(self, sender):
+            """Verify D-Bus caller UID matches service owner."""
+            if self._owner_uid is None:
+                return True
+            try:
+                bus_obj = self._bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+                iface = dbus.Interface(bus_obj, 'org.freedesktop.DBus')
+                caller_uid = iface.GetConnectionUnixUser(sender)
+                if caller_uid != self._owner_uid and caller_uid != 0:
+                    raise NexusDBusError(f"Unauthorized: caller UID {caller_uid}")
+                return True
+            except dbus.DBusException as e:
+                raise NexusDBusError(f"Auth check failed: {e}")
+
         @dbus.service.method(
             dbus_interface="org.nexus.Memory",
             in_signature="sss",
-            out_signature="s"
+            out_signature="s",
+            sender_keyword="sender"
         )
-        def Store(self, content: str, tier: str, metadata_json: str) -> str:
+        def Store(self, content: str, tier: str, metadata_json: str, sender=None) -> str:
             """Store content in memory."""
             try:
+                if sender:
+                    self._verify_caller(sender)
                 if not self.memory:
                     return json.dumps({"error": "Memory not initialized"})
                 
@@ -369,21 +423,23 @@ if DBUS_AVAILABLE:
     class NexusVoiceInterface(dbus.service.Object):
         """
         org.nexus.Voice interface implementation.
-        
+
         Methods:
         - Speak(text, streaming) -> success
         - StartListening(duration_seconds) -> transcription
-        
+
         Signals:
         - WakeWordDetected()
         - TranscriptionComplete(text, confidence)
         """
-        
+
         def __init__(self, bus, object_path, voice=None):
             dbus.service.Object.__init__(self, bus, object_path)
             self.voice = voice
             self._is_listening = False
             self._loop = None
+            self._owner_uid = os.getuid() if hasattr(os, 'getuid') else None
+            self._bus = bus
             
         def set_voice(self, voice):
             """Set the voice pipeline reference."""
@@ -401,14 +457,31 @@ if DBUS_AVAILABLE:
             else:
                 return asyncio.run(coro)
         
+        def _verify_caller(self, sender):
+            """Verify D-Bus caller UID matches service owner."""
+            if self._owner_uid is None:
+                return True
+            try:
+                bus_obj = self._bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+                iface = dbus.Interface(bus_obj, 'org.freedesktop.DBus')
+                caller_uid = iface.GetConnectionUnixUser(sender)
+                if caller_uid != self._owner_uid and caller_uid != 0:
+                    raise NexusDBusError(f"Unauthorized: caller UID {caller_uid}")
+                return True
+            except dbus.DBusException as e:
+                raise NexusDBusError(f"Auth check failed: {e}")
+
         @dbus.service.method(
             dbus_interface="org.nexus.Voice",
             in_signature="sb",
-            out_signature="b"
+            out_signature="b",
+            sender_keyword="sender"
         )
-        def Speak(self, text: str, streaming: bool) -> bool:
+        def Speak(self, text: str, streaming: bool, sender=None) -> bool:
             """Convert text to speech."""
             try:
+                if sender:
+                    self._verify_caller(sender)
                 if not self.voice:
                     logger.warning("Voice pipeline not available")
                     return False
@@ -482,20 +555,22 @@ if DBUS_AVAILABLE:
     class NexusA2AInterface(dbus.service.Object):
         """
         org.nexus.A2A interface implementation.
-        
+
         Methods:
         - RequestA2AConnection, DisconnectPeer, RequestRemoteTask
         - QueryRemoteMemory, GetConnectedPeers
-        
+
         Signals:
         - A2APeerDiscovered, A2APeerDisconnected, A2ATaskReceived
         """
-        
+
         def __init__(self, bus, object_path, a2a_protocol=None):
             dbus.service.Object.__init__(self, bus, object_path)
             self.a2a = a2a_protocol
             self._local_node_id = ""
             self._loop = None
+            self._owner_uid = os.getuid() if hasattr(os, 'getuid') else None
+            self._bus = bus
             
         def set_a2a(self, a2a_protocol):
             """Set the A2A protocol reference."""
@@ -515,14 +590,31 @@ if DBUS_AVAILABLE:
             else:
                 return asyncio.run(coro)
         
+        def _verify_caller(self, sender):
+            """Verify D-Bus caller UID matches service owner."""
+            if self._owner_uid is None:
+                return True
+            try:
+                bus_obj = self._bus.get_object('org.freedesktop.DBus', '/org/freedesktop/DBus')
+                iface = dbus.Interface(bus_obj, 'org.freedesktop.DBus')
+                caller_uid = iface.GetConnectionUnixUser(sender)
+                if caller_uid != self._owner_uid and caller_uid != 0:
+                    raise NexusDBusError(f"Unauthorized: caller UID {caller_uid}")
+                return True
+            except dbus.DBusException as e:
+                raise NexusDBusError(f"Auth check failed: {e}")
+
         @dbus.service.method(
             dbus_interface="org.nexus.A2A",
             in_signature="su",
-            out_signature="bs"
+            out_signature="bs",
+            sender_keyword="sender"
         )
-        def RequestA2AConnection(self, peer_address: str, peer_port: int) -> tuple:
+        def RequestA2AConnection(self, peer_address: str, peer_port: int, sender=None) -> tuple:
             """Request connection to a remote Nexus peer."""
             try:
+                if sender:
+                    self._verify_caller(sender)
                 if not self.a2a:
                     return False, ""
                 

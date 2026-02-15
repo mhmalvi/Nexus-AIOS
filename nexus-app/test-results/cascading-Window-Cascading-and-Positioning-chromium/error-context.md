@@ -1,0 +1,196 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic:
+    - generic [ref=e1]:
+      - generic [ref=e9] [cursor=pointer]:
+        - generic [ref=e10]:
+          - heading "06:23" [level=1] [ref=e11]
+          - paragraph [ref=e12]: Thursday, February 12
+        - generic [ref=e13]:
+          - button [ref=e15]:
+            - img [ref=e16]
+          - generic [ref=e26]:
+            - img [ref=e27]
+            - generic [ref=e29]: Click or press Enter
+        - generic [ref=e36]: AETHER OS • Neural Link Active
+      - banner:
+        - generic [ref=e38]:
+          - generic [ref=e45] [cursor=pointer]: AETHER
+          - navigation [ref=e46]:
+            - button "File" [ref=e48] [cursor=pointer]
+            - button "View" [ref=e50] [cursor=pointer]
+            - button "Tools" [ref=e52] [cursor=pointer]
+        - button "Exit Focus" [ref=e54] [cursor=pointer]:
+          - img [ref=e55]
+          - text: Exit Focus
+        - generic [ref=e60]:
+          - button "Focus Mode" [ref=e61] [cursor=pointer]:
+            - img [ref=e62]
+          - button [ref=e65] [cursor=pointer]:
+            - img [ref=e66]
+          - button [ref=e68] [cursor=pointer]:
+            - img [ref=e69]
+          - button "Thu, Feb 12 06:23 AM" [ref=e73] [cursor=pointer]:
+            - generic [ref=e74]: Thu, Feb 12
+            - generic [ref=e75]: 06:23 AM
+      - main:
+        - generic [ref=e78]:
+          - generic [ref=e79]:
+            - generic [ref=e80]:
+              - button [ref=e81] [cursor=pointer]
+              - button [ref=e82] [cursor=pointer]
+              - button [ref=e83] [cursor=pointer]
+            - generic [ref=e84]:
+              - img [ref=e85]
+              - generic [ref=e88]: AETHER Chat
+            - button [ref=e90] [cursor=pointer]:
+              - img [ref=e91]
+          - generic [ref=e95]:
+            - button [ref=e96] [cursor=pointer]:
+              - img [ref=e97]
+            - generic [ref=e101]:
+              - generic [ref=e102]: Echoes
+              - paragraph [ref=e104]: Nexus AIOS Kernel v3.1 initialized. Swarm Cluster active.
+              - generic [ref=e105]:
+                - button "Copy" [ref=e106] [cursor=pointer]:
+                  - img [ref=e107]
+                - button "Regenerate" [ref=e110] [cursor=pointer]:
+                  - img [ref=e111]
+            - generic [ref=e118]:
+              - textbox "Echoes awaiting command..." [active] [ref=e119]
+              - button "Start Voice Input" [ref=e122] [cursor=pointer]:
+                - img [ref=e123]
+      - generic [ref=e137]:
+        - generic [ref=e138]:
+          - generic [ref=e139]:
+            - generic [ref=e140]: System Diagnostics
+            - generic [ref=e143]: ONLINE
+          - generic [ref=e144]:
+            - generic [ref=e145]:
+              - generic [ref=e146]:
+                - generic [ref=e147]:
+                  - img [ref=e148]
+                  - generic [ref=e151]: Neural Load
+                - generic [ref=e152]: 33%
+              - img [ref=e153]
+            - generic [ref=e156]:
+              - generic [ref=e157]:
+                - generic [ref=e158]:
+                  - img [ref=e159]
+                  - generic [ref=e162]: VRAM Usage
+                - generic [ref=e163]: 49GB
+              - img [ref=e164]
+        - generic [ref=e167]:
+          - generic [ref=e168]: Thought Process Log
+          - img [ref=e169]
+        - generic [ref=e173]:
+          - img [ref=e174]
+          - paragraph [ref=e182]: Awaiting Input...
+        - button "Clear Buffer" [ref=e184] [cursor=pointer]:
+          - img [ref=e185]
+          - text: Clear Buffer
+      - generic [ref=e188]:
+        - generic [ref=e190]:
+          - button "AETHER Chat" [ref=e191] [cursor=pointer]:
+            - img [ref=e193]
+          - generic:
+            - generic: AETHER Chat
+        - generic [ref=e198]:
+          - button "Web Browser" [ref=e199] [cursor=pointer]:
+            - img [ref=e201]
+          - generic:
+            - generic: Web Browser
+        - generic [ref=e205]:
+          - button "Code Forge" [ref=e206] [cursor=pointer]:
+            - img [ref=e208]
+          - generic:
+            - generic: Code Forge
+        - generic [ref=e214]:
+          - button "File Manager" [ref=e215] [cursor=pointer]:
+            - img [ref=e217]
+          - generic:
+            - generic: File Manager
+        - generic [ref=e220]:
+          - button "Terminal" [ref=e221] [cursor=pointer]:
+            - img [ref=e223]
+          - generic:
+            - generic: Terminal
+        - generic [ref=e226]:
+          - button "Mission Control" [ref=e227] [cursor=pointer]:
+            - img [ref=e229]
+          - generic:
+            - generic: Mission Control
+        - generic [ref=e232]:
+          - button "Agent Builder" [ref=e233] [cursor=pointer]:
+            - img [ref=e235]
+          - generic:
+            - generic: Agent Builder
+        - generic [ref=e239]:
+          - button "Security Center" [ref=e240] [cursor=pointer]:
+            - img [ref=e242]
+          - generic:
+            - generic: Security Center
+        - generic [ref=e245]:
+          - button "Memory Explorer" [ref=e246] [cursor=pointer]:
+            - img [ref=e248]
+          - generic:
+            - generic: Memory Explorer
+        - generic [ref=e257]:
+          - button "Module Manager" [ref=e258] [cursor=pointer]:
+            - img [ref=e260]
+          - generic:
+            - generic: Module Manager
+        - generic [ref=e265]:
+          - button "Scheduler" [ref=e266] [cursor=pointer]:
+            - img [ref=e268]
+          - generic:
+            - generic: Scheduler
+        - generic [ref=e271]:
+          - button "Gallery" [ref=e272] [cursor=pointer]:
+            - img [ref=e274]
+          - generic:
+            - generic: Gallery
+        - generic [ref=e279]:
+          - button "Settings" [ref=e280] [cursor=pointer]:
+            - img [ref=e282]
+          - generic:
+            - generic: Settings
+        - generic [ref=e286]:
+          - button [ref=e287] [cursor=pointer]:
+            - img [ref=e288]
+          - generic:
+            - generic: Voice Input
+      - generic [ref=e291]:
+        - generic [ref=e292]:
+          - generic [ref=e293] [cursor=pointer]:
+            - generic [ref=e295]: KERNEL
+            - generic [ref=e296]: PID:1234
+          - generic [ref=e298]:
+            - img [ref=e299]
+            - generic [ref=e302]: 0%
+          - generic [ref=e303]:
+            - img [ref=e304]
+            - generic [ref=e306]: 1%
+            - generic [ref=e307]: (0.0/3.5GB)
+          - generic [ref=e308]:
+            - img [ref=e309]
+            - generic [ref=e311]: —
+          - generic [ref=e313]:
+            - img [ref=e314]
+            - generic [ref=e318]: 21ms
+          - generic [ref=e319]:
+            - img [ref=e320]
+            - generic [ref=e323]: up 0m
+        - generic [ref=e324]:
+          - generic [ref=e325] [cursor=pointer]:
+            - img [ref=e326]
+            - generic [ref=e334]: gemini-2.5-pro
+          - generic [ref=e336]: 06:23:08
+          - generic [ref=e338]:
+            - img [ref=e339]
+            - generic [ref=e343]: AETHER v3.2
+    - button "Tap to speak" [ref=e346] [cursor=pointer]:
+      - img [ref=e348]
+```

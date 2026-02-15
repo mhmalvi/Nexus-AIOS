@@ -1,0 +1,36 @@
+{
+    "product": {
+        "name": "Nexus AIOS",
+        "manufacturer": "Nexus Project",
+        "version": "1.0.0",
+        "id": "12345678-1234-1234-1234-123456789012",
+        "upgradeCode": "87654321-4321-4321-4321-210987654321"
+    },
+    "features": [
+        {
+            "id": "MainProgram",
+            "title": "Nexus AIOS",
+            "description": "The main core binary.",
+            "level": 1,
+            "autoSelect": true,
+            "components": [
+                "app_executable"
+            ]
+        },
+        {
+            "id": "OllamaIntegration",
+            "title": "Ollama LLM Engine",
+            "description": "Local LLM runtime for Nexus.",
+            "level": 1,
+            "autoSelect": true,
+            "components": [
+                "ollama_installer"
+            ],
+            "optional": true
+        }
+    ],
+    "directories": [
+        "ProgramFiles64Folder",
+        "Nexus"
+    ]
+}

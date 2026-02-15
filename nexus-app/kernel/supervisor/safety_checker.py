@@ -119,13 +119,63 @@ class SafetyChecker:
         """Normalize whitespace to prevent evasion via extra spaces/tabs"""
         return re.sub(r'\s+', ' ', text.strip())
 
+    @staticmethod
+    def _decode_obfuscation(text: str) -> str:
+        """Attempt to decode common obfuscation techniques.
+        Returns the decoded text appended to original for pattern matching.
+        """
+        variants = [text]
+
+        # Base64 decoding attempt
+        import base64
+        # Look for base64-encoded segments (e.g. in echo XXX | base64 -d | sh)
+        b64_pattern = re.compile(r'[A-Za-z0-9+/]{16,}={0,2}')
+        for match in b64_pattern.finditer(text):
+            try:
+                decoded = base64.b64decode(match.group()).decode('utf-8', errors='ignore')
+                if decoded and len(decoded) > 4:
+                    variants.append(decoded)
+            except Exception:
+                pass
+
+        # Hex decoding (e.g. \x72\x6d)
+        hex_pattern = re.compile(r'(?:\\x[0-9a-fA-F]{2})+')
+        for match in hex_pattern.finditer(text):
+            try:
+                decoded = bytes.fromhex(match.group().replace('\\x', '')).decode('utf-8', errors='ignore')
+                variants.append(decoded)
+            except Exception:
+                pass
+
+        # URL encoding (%72%6d)
+        try:
+            from urllib.parse import unquote
+            url_decoded = unquote(text)
+            if url_decoded != text:
+                variants.append(url_decoded)
+        except Exception:
+            pass
+
+        # Variable interpolation patterns (e.g. r"m" + " -rf /")
+        # Strip quotes and concatenation operators
+        stripped = re.sub(r'["\']?\s*\+\s*["\']?', '', text)
+        stripped = re.sub(r'["\']', '', stripped)
+        if stripped != text:
+            variants.append(stripped)
+
+        return ' '.join(variants)
+
     def check(self, action: str) -> SafetyResult:
-        """Check if an action is safe (normalizes whitespace to prevent evasion)"""
-
+        """Check if an action is safe.
+        Applies whitespace normalization and obfuscation decoding
+        to resist encoding-based evasion attempts.
+        """
         normalized = self._normalize_whitespace(action)
+        expanded = self._decode_obfuscation(normalized)
 
+        # Check all variants against patterns
         for pattern, compiled in self.compiled_patterns:
-            if compiled.search(action) or compiled.search(normalized):
+            if compiled.search(action) or compiled.search(normalized) or compiled.search(expanded):
                 return SafetyResult(
                     is_safe=False,
                     reason=f"Action matches dangerous pattern: {pattern}",

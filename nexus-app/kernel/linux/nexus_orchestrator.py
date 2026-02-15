@@ -187,6 +187,35 @@ async def create_web_server(kernel: KernelProcess, port: int):
 
     app = web.Application()
 
+    # --- Authentication Middleware ---
+    # Reads API token from NEXUS_API_TOKEN env var or ~/.aether/api_token
+    api_token = os.environ.get("NEXUS_API_TOKEN", "")
+    if not api_token:
+        token_path = Path.home() / ".aether" / "api_token"
+        if token_path.exists():
+            api_token = token_path.read_text().strip()
+
+    auth_enabled = bool(api_token)
+    if not auth_enabled:
+        print("⚠️  WARNING: No NEXUS_API_TOKEN set — REST API is unauthenticated!", file=sys.stderr)
+        print("   Set NEXUS_API_TOKEN env var or create ~/.aether/api_token", file=sys.stderr)
+
+    @web.middleware
+    async def auth_middleware(request, handler):
+        # Health endpoint is always public
+        if request.path == "/health":
+            return await handler(request)
+        if auth_enabled:
+            token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+            if token != api_token:
+                return web.json_response(
+                    {"error": "Unauthorized — set Authorization: Bearer <token>"},
+                    status=401
+                )
+        return await handler(request)
+
+    app.middlewares.append(auth_middleware)
+
     # --- REST Endpoints ---
 
     async def handle_health(request):
@@ -248,6 +277,22 @@ async def create_web_server(kernel: KernelProcess, port: int):
 
         return ws
 
+    # --- SPA static file serving for Linux (no Tauri) ---
+    # Serves the built React frontend from dist/ on all non-API paths
+    DIST_DIR = Path(__file__).resolve().parent.parent.parent / "dist"
+    spa_enabled = DIST_DIR.is_dir()
+
+    async def handle_spa(request):
+        """Serve React SPA — try static file first, fall back to index.html."""
+        rel_path = request.match_info.get("path", "")
+        file_path = DIST_DIR / rel_path
+        if rel_path and file_path.is_file():
+            return web.FileResponse(file_path)
+        index = DIST_DIR / "index.html"
+        if index.is_file():
+            return web.FileResponse(index)
+        return web.json_response({"error": "Frontend not built — run 'npm run build'"}, status=404)
+
     # --- Route registration ---
     app.router.add_get("/health", handle_health)
     app.router.add_post("/api/query", handle_query)
@@ -257,14 +302,43 @@ async def create_web_server(kernel: KernelProcess, port: int):
     app.router.add_post("/api/stop", handle_stop)
     app.router.add_get("/ws", handle_ws)
 
+    # SPA catch-all must be last
+    if spa_enabled:
+        app.router.add_get("/{path:.*}", handle_spa)
+        print(f"📦 Serving frontend from {DIST_DIR}", file=sys.stderr)
+    else:
+        print(f"⚠️  Frontend dist/ not found at {DIST_DIR} — API-only mode", file=sys.stderr)
+
+    # Bind to localhost by default; set NEXUS_BIND_HOST=0.0.0.0 for network access
+    bind_host = os.environ.get("NEXUS_BIND_HOST", "127.0.0.1")
+
+    # --- Optional TLS ---
+    # Set NEXUS_TLS_CERT and NEXUS_TLS_KEY to enable HTTPS
+    ssl_ctx = None
+    tls_cert = os.environ.get("NEXUS_TLS_CERT", "")
+    tls_key = os.environ.get("NEXUS_TLS_KEY", "")
+    if tls_cert and tls_key:
+        import ssl
+        ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        ssl_ctx.load_cert_chain(tls_cert, tls_key)
+        protocol = "https"
+    else:
+        protocol = "http"
+
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, bind_host, port, ssl_context=ssl_ctx)
     await site.start()
-    print(f"🌐 REST API listening on http://0.0.0.0:{port}", file=sys.stderr)
+    print(f"🌐 REST API listening on {protocol}://{bind_host}:{port}", file=sys.stderr)
+    if ssl_ctx:
+        print(f"   TLS: {tls_cert}", file=sys.stderr)
+    if bind_host == "127.0.0.1":
+        print("   (localhost only — set NEXUS_BIND_HOST=0.0.0.0 for network access)", file=sys.stderr)
     print(f"   POST /api/query    — Send a query", file=sys.stderr)
     print(f"   GET  /api/status   — Kernel status", file=sys.stderr)
     print(f"   GET  /ws           — WebSocket stream", file=sys.stderr)
+    if auth_enabled:
+        print(f"   Auth: Bearer token required", file=sys.stderr)
     return runner
 
 

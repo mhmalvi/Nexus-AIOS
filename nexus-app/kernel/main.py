@@ -10,6 +10,7 @@ import sys
 import signal
 import os
 import io
+import time
 
 # Force UTF-8 encoding for stdout/stderr to support emojis on Windows
 # and ensure unbuffered output
@@ -21,6 +22,11 @@ else:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
 
+# Add kernel directory to sys.path to ensure local imports work regardless of CWD
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -30,11 +36,13 @@ from brain.query_cache import QueryCache
 from memory import MemoryManager
 from memory import SelfLearningEngine, create_action_record
 from memory import DocumentIndexer
+from memory import DeepMemory
 from hardware.system_stats import SystemStats
 from toolbox import Toolbox, NotificationManager
 from toolbox.mcp_client_manager import MCPClientManager
 from supervisor import AgenticSupervisor
 from agents import WorkerAgent, ManagerAgent, SecurityAuditorAgent, CodeArchitectAgent, ResearchAgent, QAAgent, MonitorAgent
+from agents.agent_persistence import AgentPersistence
 from runtime_config import RuntimeConfig
 
 # Hardware acceleration (optional — needs torch/openvino)
@@ -55,6 +63,14 @@ except ImportError:
     SKILLS_AVAILABLE = False
     SkillLoader = None
     DockerSandbox = None
+
+# Plugin system (optional)
+try:
+    from plugin_system import PluginSystem
+    PLUGINS_AVAILABLE = True
+except ImportError:
+    PLUGINS_AVAILABLE = False
+    PluginSystem = None
 
 # OpenClaw bridge (optional)
 try:
@@ -80,6 +96,35 @@ except ImportError:
     VOICE_AVAILABLE = False
     VoicePipeline = None
 
+# Security module (GAPs 6, 7, 8)
+try:
+    from security.self_destruct import SelfDestructEngine, DestructLevel
+    from security.network_firewall import NetworkFirewall, FirewallAction, FirewallVerdict
+    from security.intent_dispatcher import IntentDispatcher, IntentCategory
+    SECURITY_AVAILABLE = True
+except ImportError:
+    SECURITY_AVAILABLE = False
+    SelfDestructEngine = None
+    NetworkFirewall = None
+    IntentDispatcher = None
+
+# QMD Manager (GAP 5)
+try:
+    from memory.qmd_manager import QMDManager
+    QMD_AVAILABLE = True
+except ImportError:
+    QMD_AVAILABLE = False
+    QMDManager = None
+
+# Auto-Reply Engine (GAP 9)
+try:
+    from auto_reply import AutoReplyEngine, COMMAND_REGISTRY
+    AUTOREPLY_AVAILABLE = True
+except ImportError:
+    AUTOREPLY_AVAILABLE = False
+    AutoReplyEngine = None
+    COMMAND_REGISTRY = None
+
 
 @dataclass
 class KernelMessage:
@@ -98,6 +143,41 @@ class KernelResponse:
     message_type: str
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+
+
+try:
+    from cron_service import CronService, JobType
+    CRON_AVAILABLE = True
+except ImportError:
+    CRON_AVAILABLE = False
+    CronService = None
+
+try:
+    from toolbox.browser_engine import BrowserEngine, BrowserType
+    BROWSER_AVAILABLE = True
+except ImportError:
+    BROWSER_AVAILABLE = False
+    BrowserEngine = None
+    BrowserType = None
+
+# CDP Fallback
+try:
+    from toolbox.cdp_browser_engine import CDPBrowserEngine
+    CDP_AVAILABLE = True
+except ImportError:
+    CDP_AVAILABLE = False
+    CDPBrowserEngine = None
+
+# Messaging Bridge
+try:
+    from bridge.channel_router import ChannelRouter, ChannelType
+    from bridge.openclaw_client import OpenClawClient
+    MESSAGING_AVAILABLE = True
+except ImportError:
+    MESSAGING_AVAILABLE = False
+    ChannelRouter = None
+    OpenClawClient = None
+
 
 
 class AetherKernel:
@@ -130,12 +210,23 @@ class AetherKernel:
         
         # === PERSISTENT RUNTIME CONFIG ===
         self.runtime_config = RuntimeConfig()
+
+        # === AGENT PERSISTENCE ===
+        try:
+            agent_storage = (self.config.get("data_dir", "./data") + "/agents")
+            self.agent_persistence = AgentPersistence(storage_dir=agent_storage)
+            print(f"🗄️ Agent Persistence initialized: {agent_storage}", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️ Agent Persistence init failed: {e}", file=sys.stderr)
+            self.agent_persistence = None
         
         # Initialize core components
-        self.brain = Brain(
-            model=self.config.get("model", "llama3.2:3b"),
-            base_url=self.config.get("ollama_url", "http://localhost:11434")
-        )
+        # Prepare configuration with defaults
+        brain_config = (self.config or {}).copy()
+        brain_config.setdefault("model", "llama3.2:3b")
+        brain_config.setdefault("ollama_host", "http://localhost:11434")
+        
+        self.brain = Brain(config=brain_config)
         
         # === QUERY CACHE (LRU + TTL) ===
         self.query_cache = QueryCache(
@@ -179,7 +270,8 @@ class AetherKernel:
             code_architect=self.code_architect,
             researcher=self.researcher,
             qa_engineer=self.qa_engineer,
-            failure_limit=self.config.get("agent_failure_limit", 3)
+            failure_limit=self.config.get("agent_failure_limit", 3),
+            memory=self.memory
         )
         
         # Voice pipeline (optional)
@@ -223,7 +315,17 @@ class AetherKernel:
         self.sandbox = None
         if SKILLS_AVAILABLE and DockerSandbox is not None:
             self.sandbox = DockerSandbox()
-        
+
+        # === PLUGIN SYSTEM ===
+        self.plugin_system = None
+        if PLUGINS_AVAILABLE and PluginSystem is not None:
+            try:
+                plugins_dir = os.path.join(os.path.dirname(__file__), "plugins")
+                self.plugin_system = PluginSystem(plugins_dir)
+                print(f"🔌 Plugin system initialized: {plugins_dir}", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Plugin system init skipped: {e}", file=sys.stderr)
+
         # === OPENCLAW BRIDGE (External Messaging) ===
         self.openclaw_client = None
         if OPENCLAW_AVAILABLE and OpenClawClient is not None:
@@ -232,7 +334,9 @@ class AetherKernel:
             print(f"🔗 OpenClaw bridge configured: {gateway_url}", file=sys.stderr)
         
         # Track pending actions for HIL approval
-        self.pending_actions = {}  # Map of message_id -> action_string
+        # Map of message_id -> {"action": str, "created_at": float}
+        self.pending_actions = {}
+        self._pending_actions_ttl = 600  # 10 minute TTL for stale entries
         
         # Initialize Monitor Agent for background system health
         self.monitor_agent = MonitorAgent(
@@ -249,6 +353,108 @@ class AetherKernel:
         
         if self._voice_enabled and VOICE_AVAILABLE:
             self._setup_voice()
+        
+        # === SECURITY SUBSYSTEM (GAPs 6, 7, 8) ===
+        self.self_destruct = None
+        self.network_firewall = None
+        self.intent_dispatcher = None
+        if SECURITY_AVAILABLE:
+            try:
+                self.self_destruct = SelfDestructEngine()
+                self.network_firewall = NetworkFirewall()
+                self.intent_dispatcher = IntentDispatcher()
+                print("🛡️ Security subsystem initialized (SelfDestruct, Firewall, IntentDispatcher)", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Security init partial: {e}", file=sys.stderr)
+        
+        # === QMD MANAGER (GAP 5) ===
+        self.qmd_manager = None
+        if QMD_AVAILABLE:
+            try:
+                qmd_path = self.config.get("qmd_path", "./data/qmd")
+                self.qmd_manager = QMDManager(qmd_path=qmd_path)
+                print("📄 QMD Manager initialized", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ QMD Manager init skipped: {e}", file=sys.stderr)
+        
+        # === DEEP MEMORY (Tier 4 Knowledge Graph) ===
+        self.deep_memory = None
+        try:
+            dm_path = os.path.expanduser(
+                self.config.get("deep_memory_path", "~/.aether/deep_memory.json")
+            )
+            self.deep_memory = DeepMemory(storage_path=dm_path)
+            print(f"🧠 Deep Memory (Tier 4) initialized: {self.deep_memory.get_stats().get('total_entities', 0)} entities", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️ Deep Memory init skipped: {e}", file=sys.stderr)
+
+        # === AUTO-REPLY ENGINE (GAP 9) ===
+        self.auto_reply = None
+        if AUTOREPLY_AVAILABLE:
+            try:
+                self.auto_reply = AutoReplyEngine()
+                cmd_count = COMMAND_REGISTRY.count if COMMAND_REGISTRY else 0
+                print(f"💬 Auto-Reply Engine initialized ({cmd_count} commands)", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Auto-Reply init skipped: {e}", file=sys.stderr)
+            
+        # === CRON SERVICE (GAP 3) ===
+        self.cron = None
+        if CRON_AVAILABLE and CronService:
+            try:
+                self.cron = CronService(execute_fn=self._execute_cron_job)
+                print("⏰ Cron Service initialized", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Cron Service init failed: {e}", file=sys.stderr)
+        
+        # === BROWSER ENGINE (with CDP Fallback) ===
+        self.browser = None
+        self._browser_engine_type = "none"
+        if BROWSER_AVAILABLE and BrowserEngine:
+            try:
+                self.browser = BrowserEngine(headless=False)
+                self._browser_engine_type = "playwright"
+                print("🌐 Browser Engine initialized (Playwright)", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Playwright Browser init failed: {e}", file=sys.stderr)
+        
+        # CDP Fallback if Playwright failed or unavailable
+        if not self.browser and CDP_AVAILABLE and CDPBrowserEngine:
+            try:
+                self.browser = CDPBrowserEngine(headless=True)
+                self._browser_engine_type = "cdp"
+                print("🌐 Browser Engine initialized (CDP Fallback)", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ CDP Browser Engine init failed: {e}", file=sys.stderr)
+        
+        # === MESSAGING CHANNELS ===
+        self.channel_router = None
+        self.openclaw_client = None
+        if MESSAGING_AVAILABLE and ChannelRouter and OpenClawClient:
+            try:
+                self.openclaw_client = OpenClawClient()
+                self.channel_router = ChannelRouter()
+                self.channel_router.set_openclaw_client(self.openclaw_client)
+                self.channel_router.set_kernel_callback(self._process_channel_message)
+                print("📡 Messaging Channel Router initialized", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Channel Router init failed: {e}", file=sys.stderr)
+        
+        # === INTENT DISPATCHER (NLU Pipeline) ===
+        self.brain_intent_dispatcher = None
+        try:
+            from brain.intent_parser import IntentParser
+            from brain.intent_dispatcher import IntentDispatcher as BrainIntentDispatcher
+            self.intent_parser = IntentParser(llm=self.brain)
+            self.brain_intent_dispatcher = BrainIntentDispatcher(
+                brain=self.brain,
+                toolbox=self.toolbox,
+                supervisor=self.supervisor
+            )
+            print("🧭 Intent NLU Pipeline initialized (Parser + Dispatcher)", file=sys.stderr)
+        except Exception as e:
+            self.intent_parser = None
+            print(f"⚠️ Intent NLU Pipeline init skipped: {e}", file=sys.stderr)
             
         print("🧠 Aether Kernel initialized", file=sys.stderr)
     
@@ -360,7 +566,7 @@ class AetherKernel:
             
             elif message.message_type == "status":
                 # Status check
-                return self._handle_status(message)
+                return await self._handle_status(message)
             
             elif message.message_type == "ping":
                 # Health check
@@ -402,6 +608,10 @@ class AetherKernel:
             elif message.message_type == "manage_model":
                 return await self._handle_manage_model(message)
 
+            elif message.message_type == "browser":
+                # Handle browser automation requests
+                return await self._handle_browser(message)
+
             elif message.message_type == "model_stats":
                 # Get model routing statistics
                 return await self._handle_model_stats(message)
@@ -427,6 +637,36 @@ class AetherKernel:
                 # Update runtime configuration
                 return await self._handle_update_config(message)
             
+            elif message.message_type == "security":
+                return await self._handle_security(message)
+            
+            elif message.message_type == "firewall":
+                return await self._handle_firewall(message)
+            
+            elif message.message_type == "intent":
+                return await self._handle_intent(message)
+            
+            elif message.message_type == "qmd":
+                return await self._handle_qmd(message)
+            
+            elif message.message_type == "cron":
+                return await self._handle_cron(message)
+            
+            elif message.message_type == "intent_dispatch":
+                return await self._handle_intent_dispatch(message)
+            
+            elif message.message_type == "messaging":
+                return await self._handle_messaging(message)
+
+            elif message.message_type == "deep_memory":
+                return await self._handle_deep_memory(message)
+
+            elif message.message_type == "plugin":
+                return await self._handle_plugin(message)
+
+            elif message.message_type == "agent_registry":
+                return await self._handle_agent_registry(message)
+
             else:
                 return KernelResponse(
                     id=message.id,
@@ -443,17 +683,157 @@ class AetherKernel:
                 error=str(e)
             )
     
+    async def _handle_agent_registry(self, message: KernelMessage) -> KernelResponse:
+        """Handle agent registry operations (register, unregister, update status, save layout)"""
+        if not self.agent_persistence:
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="error",
+                error="Agent persistence not initialized"
+            )
+            
+        action = message.payload.get("action")
+        
+        try:
+            if action == "register_agent":
+                agent_data = message.payload
+                # Remove action and other non-agent fields if necessary, 
+                # but AgentConfig.from_dict only picks what it needs
+                
+                agent = self.agent_persistence.register_agent(agent_data)
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="agent_registered",
+                    data={"agent": agent.to_dict()}
+                )
+                
+            elif action == "unregister_agent":
+                agent_id = message.payload.get("agent_id")
+                success = self.agent_persistence.unregister_agent(agent_id)
+                return KernelResponse(
+                    id=message.id,
+                    success=success,
+                    message_type="agent_unregistered",
+                    data={"agent_id": agent_id}
+                )
+                
+            elif action == "update_status":
+                agent_id = message.payload.get("agent_id")
+                status = message.payload.get("status")
+                self.agent_persistence.update_status(agent_id, status)
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="status_updated",
+                    data={"agent_id": agent_id, "status": status}
+                )
+
+            elif action == "save_layout":
+                layout = message.payload.get("layout")
+                self.agent_persistence.save_layout(layout)
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="layout_saved",
+                    data={}
+                )
+                
+            elif action == "get_registry":
+                agents = [a.to_dict() for a in self.agent_persistence.get_all_agents()]
+                layout = self.agent_persistence.get_layout()
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="registry_state",
+                    data={"agents": agents, "layout": layout}
+                )
+
+            # --- Start/Stop Agent Logic ---
+            elif action == "start_agent":
+                agent_id = message.payload.get("agent_id")
+                self.agent_persistence.update_status(agent_id, "running")
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="agent_started",
+                    data={"agent_id": agent_id}
+                )
+                
+            elif action == "stop_agent":
+                agent_id = message.payload.get("agent_id")
+                self.agent_persistence.update_status(agent_id, "idle")
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="agent_stopped",
+                    data={"agent_id": agent_id}
+                )
+            
+            else:
+                 return KernelResponse(
+                    id=message.id,
+                    success=False,
+                    message_type="error",
+                    error=f"Unknown agent_registry action: {action}"
+                )
+
+        except Exception as e:
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="error",
+                error=str(e)
+            )
+
     async def _handle_query(self, message: KernelMessage) -> KernelResponse:
         """Handle a simple RAG query with Model Routing, Cache, and H-MEM"""
-        print(f"🔍 _handle_query payload: {json.dumps(message.payload)}", file=sys.stderr)
+        # DEBUG: Dump full message for diagnosis
+        print(f"🔍 [KERNEL] _handle_query received: {json.dumps(message.payload, default=str)}", file=sys.stderr)
         
         query = message.payload.get("query", "")
+        
+        # Fallback: Check for 'text' or 'message' or 'content'
+        if not query:
+            query = message.payload.get("text", "")
+        if not query:
+            query = message.payload.get("message", "")
+            
+        # Fail fast if still empty
+        if not query:
+             print(f"❌ [KERNEL] No query provided in payload: {message.payload}", file=sys.stderr)
+             return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="error",
+                error="No query provided. Payload must contain 'query', 'text', or 'message'."
+            )
+
         context_mode = message.payload.get("context_mode", "auto")
         
         # H-MEM filters
         domain = message.payload.get("domain")
         category = message.payload.get("category")
         
+        # === AUTO-REPLY RECOGNITION (GAP 9) ===
+        if self.auto_reply:
+            cmd = self.auto_reply.dispatch_command(query)
+            if cmd:
+                print(f"🤖 Auto-Reply Command Detected: {cmd.name}", file=sys.stderr)
+                # For now, just acknowledge. Future: execute _cmd_ methods.
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="response",
+                    data={
+                        "response": f"**Command Recognized:** `/{cmd.name}`\n*{cmd.description}*\n\n(Command execution pending implementation in handler registry)",
+                        "context_used": 0,
+                        "model": "system",
+                        "routing_category": "command"
+                    }
+                )
+
         # === QUERY CACHE CHECK ===
         cache_key = self.query_cache.make_key(query, self.brain.model)
         cached = await self.query_cache.get(cache_key)
@@ -587,9 +967,10 @@ class AetherKernel:
         command = message.payload.get("command", "")
         args = message.payload.get("args", [])
         
-        # Construct full action string and store for HIL
+        # Construct full action string and store for HIL (with timestamp for TTL cleanup)
         full_action = f"{command} {' '.join(args)}".strip()
-        self.pending_actions[message.id] = full_action
+        self.pending_actions[message.id] = {"action": full_action, "created_at": time.time()}
+        self._cleanup_stale_pending_actions()
         
         # Validate through supervisor
         validation = self.supervisor.validate(
@@ -643,10 +1024,25 @@ class AetherKernel:
             error=result.error
         )
     
-    def _handle_status(self, message: KernelMessage) -> KernelResponse:
+    async def _handle_status(self, message: KernelMessage) -> KernelResponse:
         """Handle status request — reports all wired subsystem statuses."""
         cache_stats = self.query_cache._stats if hasattr(self.query_cache, '_stats') else {}
         
+        # Firewall stats
+        firewall_stats = None
+        if self.network_firewall:
+            try:
+                firewall_stats = self.network_firewall.get_stats()
+            except Exception:
+                firewall_stats = {"error": "unavailable"}
+
+        # Get installed models (async)
+        installed_models = []
+        try:
+            installed_models = await self.brain.list_models()
+        except Exception as e:
+            print(f"⚠️ [KERNEL] Failed to list models: {e}", file=sys.stderr)
+    
         return KernelResponse(
             id=message.id,
             success=True,
@@ -654,11 +1050,12 @@ class AetherKernel:
             data={
                 "running": self.running,
                 "model": self.brain.model,
+                "installed_models": installed_models,
                 "memory_stats": self.memory.get_stats(),
                 "toolbox_tools": self.toolbox.list_tools(),
                 "voice_available": VOICE_AVAILABLE,
                 "voice_enabled": self._voice_enabled,
-                # === NEW: Subsystem statuses ===
+                # === Subsystem statuses ===
                 "query_cache": cache_stats,
                 "npu_available": self.npu_accelerator is not None,
                 "npu_backend": self.npu_accelerator.detect_backend() if self.npu_accelerator else None,
@@ -667,9 +1064,491 @@ class AetherKernel:
                 "sandbox_available": self.sandbox is not None,
                 "openclaw_connected": self.openclaw_client is not None,
                 "environment": self.environment,
+                # === GAP modules ===
+                "security_available": SECURITY_AVAILABLE,
+                "self_destruct_armed": self.self_destruct is not None,
+                "firewall": firewall_stats,
+                "intent_dispatcher": self.intent_dispatcher is not None,
+                "qmd_manager": self.qmd_manager is not None,
+                "auto_reply_engine": self.auto_reply is not None,
+                "auto_reply_commands": COMMAND_REGISTRY.count if COMMAND_REGISTRY else 0,
             }
         )
     
+    async def _handle_security(self, message: KernelMessage) -> KernelResponse:
+        """Handle security subsystem commands (Self-Destruct, etc)."""
+        if not SECURITY_AVAILABLE:
+            return KernelResponse(id=message.id, success=False, error="Security module not available")
+            
+        action = message.payload.get("action")
+        data = message.payload.get("data", {})
+        
+        if action == "destruct_status":
+            return KernelResponse(
+                id=message.id, 
+                success=True, 
+                message_type="security_status",
+                data=self.self_destruct.get_status()
+            )
+            
+        elif action == "initiate_destruct":
+            level_str = data.get("level", "soft_lock")
+            pin = data.get("pin", "")
+            voice_print = data.get("voice_print", None)
+            
+            try:
+                level = DestructLevel(level_str.lower())
+            except ValueError:
+                return KernelResponse(id=message.id, success=False, error=f"Invalid destruct level: {level_str}")
+                
+            # TODO: Add real voice print verification here
+            voice_verified = bool(voice_print) 
+            
+            result = await self.self_destruct.execute(level, pin, voice_verified=voice_verified)
+            return KernelResponse(
+                id=message.id,
+                success=result.success,
+                message_type="destruct_result",
+                data={"status": result.status.value, "files_destroyed": result.files_destroyed},
+                error=str(result.errors) if result.errors else None
+            )
+            
+        elif action == "cancel_destruct":
+            # self_destruct.abort() doesn't take a pin in the class definition, 
+            # but maybe we should verify it before calling abort?
+            # For now, following the class signature:
+            success = await self.self_destruct.abort()
+            return KernelResponse(
+                id=message.id,
+                success=success,
+                message_type="destruct_cancel",
+                data={"message": "Destruct sequence aborted" if success else "Failed to abort"},
+                error=None if success else "Could not abort"
+            )
+            
+        return KernelResponse(id=message.id, success=False, error=f"Unknown security action: {action}")
+
+    async def _handle_firewall(self, message: KernelMessage) -> KernelResponse:
+        """Handle network firewall commands."""
+        if not self.network_firewall:
+            return KernelResponse(id=message.id, success=False, error="Firewall not available")
+            
+        action = message.payload.get("action")
+        data = message.payload.get("data", {})
+        
+        if action == "status":
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="firewall_status",
+                data=self.network_firewall.get_stats()
+            )
+            
+        elif action == "add_rule":
+            self.network_firewall.add_rule(
+                rule_id=data.get("id", str(time.time())),
+                pattern=data.get("pattern", "*"),
+                action=FirewallAction(data.get("action", "deny")),
+                description=data.get("description", "")
+            )
+            return KernelResponse(id=message.id, success=True, message_type="firewall_rule_added")
+
+        elif action == "delete_rule":
+            success = self.network_firewall.remove_rule(data.get("id"))
+            return KernelResponse(
+                id=message.id, 
+                success=success, 
+                message_type="firewall_rule_deleted",
+                error=None if success else "Rule not found"
+            )
+
+        elif action == "list_rules":
+            rules = self.network_firewall.list_rules()
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="firewall_rules",
+                data={"rules": [r.__dict__ for r in rules]}
+            )
+
+        elif action == "logs":
+            events = self.network_firewall.get_recent_events(limit=data.get("limit", 50))
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="firewall_logs",
+                data={"events": [e.__dict__ for e in events]}
+            )
+            
+        return KernelResponse(id=message.id, success=False, error=f"Unknown firewall action: {action}")
+
+    async def _handle_intent(self, message: KernelMessage) -> KernelResponse:
+        """Handle intent classification requests."""
+        if not self.intent_dispatcher:
+            return KernelResponse(id=message.id, success=False, error="Intent Dispatcher not available")
+            
+        text = message.payload.get("text", "")
+        source = message.payload.get("source", "text")
+        
+        # Dispatch processing
+        result = await self.intent_dispatcher.dispatch(text, source)
+        
+        return KernelResponse(
+            id=message.id,
+            success=result.handled,
+            message_type="intent_result",
+            data={
+                "category": result.intent.category.value,
+                "action": result.intent.action,
+                "confidence": result.intent.confidence,
+                "slots": result.intent.slots,
+                "response": result.response,
+                "handler": result.handler_name
+            },
+            error=result.error
+        )
+
+    async def _handle_browser(self, message: KernelMessage) -> KernelResponse:
+        """Handle browser automation requests"""
+        if not self.browser:
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="browser_error",
+                error="Browser engine not available"
+            )
+            
+        payload = message.payload
+        action = payload.get("action")
+        
+        try:
+            # Ensure initialized
+            if not self.browser.is_initialized:
+                await self.browser.initialize()
+                
+            if action == "navigate":
+                url = payload.get("url")
+                if not url:
+                    raise ValueError("URL required for navigation")
+                
+                result = await self.browser.browse(url, take_screenshot=True)
+                # Read file as base64
+                b64_image = ""
+                if result.screenshot_path and os.path.exists(result.screenshot_path):
+                    import base64
+                    with open(result.screenshot_path, "rb") as f:
+                        b64_image = base64.b64encode(f.read()).decode("utf-8")
+                
+                return KernelResponse(
+                    id=message.id,
+                    success=result.success,
+                    message_type="browser_result",
+                    data={
+                        "url": result.url,
+                        "title": result.title,
+                        "screenshot_path": result.screenshot_path,
+                        "screenshot": b64_image,
+                        "text_snippet": result.text_content[:500] if result.text_content else ""
+                    },
+                    error=result.error
+                )
+                
+            elif action == "screenshot":
+                result = await self.browser.screenshot(full_page=payload.get("full_page", False))
+                # Read file as base64
+                b64_image = ""
+                if result.path and os.path.exists(result.path):
+                    import base64
+                    with open(result.path, "rb") as f:
+                        b64_image = base64.b64encode(f.read()).decode("utf-8")
+                        
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="browser_screenshot",
+                    data={
+                        "path": result.path,
+                        "screenshot": b64_image,
+                        "width": result.width,
+                        "height": result.height
+                    }
+                )
+                
+            elif action == "click":
+                selector = payload.get("selector")
+                x = payload.get("x")
+                y = payload.get("y")
+                
+                if x is not None and y is not None:
+                    # Click by coordinates
+                    if self.browser._page:
+                        await self.browser._page.mouse.click(x, y)
+                        return KernelResponse(id=message.id, success=True, message_type="browser_action", data={"action": "click_coords"})
+                elif selector:
+                    success = await self.browser.click(selector)
+                    return KernelResponse(
+                        id=message.id, 
+                        success=success, 
+                        message_type="browser_action", 
+                        data={"action": "click", "selector": selector}
+                    )
+            
+            elif action == "type":
+                selector = payload.get("selector")
+                text = payload.get("text")
+                if self.browser._page and text:
+                    if selector:
+                        await self.browser.type_text(selector, text)
+                    else:
+                        await self.browser._page.keyboard.type(text)
+                    return KernelResponse(id=message.id, success=True, message_type="browser_action", data={"action": "type"})
+                    
+            elif action == "scroll":
+                direction = payload.get("direction", "down")
+                amount = payload.get("amount", 500)
+                await self.browser.scroll(direction, amount)
+                return KernelResponse(id=message.id, success=True, message_type="browser_action", data={"action": "scroll"})
+
+            elif action == "go_back":
+                success = await self.browser.go_back()
+                return KernelResponse(id=message.id, success=success, message_type="browser_action", data={"action": "back"})
+
+            elif action == "go_forward":
+                success = await self.browser.go_forward()
+                return KernelResponse(id=message.id, success=success, message_type="browser_action", data={"action": "forward"})
+                
+            elif action == "reload":
+                success = await self.browser.reload()
+                return KernelResponse(id=message.id, success=success, message_type="browser_action", data={"action": "reload"})
+                
+            elif action == "get_state":
+                 # Return current title, url, etc.
+                 info = await self.browser.get_page_info()
+                 return KernelResponse(
+                     id=message.id,
+                     success=True,
+                     message_type="browser_state",
+                     data={
+                         "url": info.url,
+                         "title": info.title,
+                         "tabs": await self.browser.list_tabs()
+                     }
+                 )
+
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="browser_error",
+                error=f"Unknown browser action: {action}"
+            )
+            
+        except Exception as e:
+            logger.error(f"Browser action failed: {e}")
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="browser_error",
+                error=str(e)
+            )
+
+    async def _handle_cron(self, message: KernelMessage) -> KernelResponse:
+        """Handle cron management commands"""
+        if not self.cron:
+             return KernelResponse(id=message.id, success=False, error="Cron service not available")
+             
+        action = message.payload.get("action")
+        
+        if action == "add_job":
+            # Extract basic fields
+            name = message.payload.get("title", "Untitled Job")
+            schedule = message.payload.get("schedule", "* * * * *")
+            agent = message.payload.get("agent", "Manager")
+            recurrence = message.payload.get("recurrence", "none")
+            
+            # Simple conversion to job type - default to prompt
+            job_type = JobType.PROMPT
+            payload = {
+                "prompt": f"Execute scheduled task: {name} via agent {agent}",
+                "context_mode": "auto"
+            }
+            
+            try:
+                job_id = await self.cron.add_job(
+                    name=name,
+                    schedule=schedule,
+                    job_type=job_type,
+                    payload=payload,
+                    one_shot=(recurrence == "none")
+                )
+                return KernelResponse(id=message.id, success=True, message_type="cron_result", data={"job_id": job_id})
+            except Exception as e:
+                return KernelResponse(id=message.id, success=False, error=str(e))
+            
+        elif action == "remove_job":
+            job_id = message.payload.get("job_id")
+            success = await self.cron.remove_job(job_id)
+            return KernelResponse(id=message.id, success=success, message_type="cron_result", data={"success": success})
+            
+        elif action == "list_jobs":
+            jobs = self.cron.list_jobs()
+            return KernelResponse(
+                id=message.id, 
+                success=True, 
+                message_type="cron_list", 
+                data={"jobs": [j.to_dict() for j in jobs]}
+            )
+            
+        return KernelResponse(id=message.id, success=False, error="Unknown cron action")
+
+    async def _execute_cron_job(self, job) -> str:
+        """Callback for CronService to execute a job"""
+        print(f"⏰ Executing cron job: {job.name}", file=sys.stderr)
+        
+        try:
+            # Create a synthetic message to process via existing pipeline
+            msg = KernelMessage(
+                id=f"cron_{job.job_id}_{int(time.time())}",
+                message_type="query", # Use query type for prompts
+                payload=job.payload
+            )
+            
+            # If job type is tool, adjust
+            if job.job_type == JobType.TOOL:
+                msg.message_type = "command"
+                # payload should already be correctly formatted for command
+            
+            resp = await self.process_message(msg)
+            
+            if resp.success:
+                if resp.data and "response" in resp.data:
+                    return str(resp.data["response"])
+                return "Success"
+            else:
+                return f"Error: {resp.error}"
+                
+        except Exception as e:
+            return f"Execution failed: {e}"
+
+    # NOTE: _handle_firewall is defined above (lines ~958-1010) — single canonical version
+    # NOTE: _handle_intent is defined above (lines ~1012-1036) — single canonical version
+
+    async def _handle_intent_dispatch(self, message: KernelMessage) -> KernelResponse:
+        """Handle full NLU pipeline: IntentParser → IntentDispatcher.
+        
+        Chains the intent parser (classifies text) with the intent dispatcher
+        (routes to appropriate handler: tool, AI, plan, etc.)
+        """
+        if not self.intent_parser or not self.brain_intent_dispatcher:
+            return KernelResponse(
+                id=message.id, success=False,
+                error="Intent NLU pipeline not available (parser or dispatcher missing)"
+            )
+        
+        text = message.payload.get("text", "")
+        if not text:
+            return KernelResponse(id=message.id, success=False, error="No text provided")
+        
+        try:
+            # Step 1: Parse intent from natural language
+            parsed = await self.intent_parser.parse(text)
+            
+            # Step 2: Dispatch to appropriate handler
+            result = await self.brain_intent_dispatcher.dispatch(parsed)
+            
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="intent_dispatch_result",
+                data={
+                    "route": result.route,
+                    "response": result.response,
+                    "tool_used": result.tool_used,
+                    "intent_type": parsed.intent_type,
+                    "confidence": parsed.confidence,
+                    "metadata": result.metadata
+                }
+            )
+        except Exception as e:
+            return KernelResponse(
+                id=message.id, success=False,
+                message_type="error",
+                error=f"Intent dispatch failed: {e}"
+            )
+
+    async def _handle_qmd(self, message: KernelMessage) -> KernelResponse:
+        """Handle QMD knowledge base operations."""
+        if not QMD_AVAILABLE or not self.qmd_manager:
+            return KernelResponse(id=message.id, success=False, error="QMD manager not available")
+            
+        action = message.payload.get("action")
+        data = message.payload.get("data", {})
+        
+        if action == "search":
+            query = data.get("query", "")
+            tags = data.get("tags")
+            limit = data.get("limit", 10)
+            results = self.qmd_manager.search(query, tags, limit)
+            return KernelResponse(id=message.id, success=True, message_type="qmd_results", data={"results": results})
+            
+        elif action == "create":
+            path = self.qmd_manager.create_qmd(
+                title=data.get("title", "Untitled"),
+                content=data.get("content", ""),
+                tags=data.get("tags", []),
+                metadata=data.get("metadata", {})
+            )
+            return KernelResponse(id=message.id, success=True, message_type="qmd_created", data={"path": str(path)})
+            
+        elif action == "update":
+            path = data.get("path")
+            content = data.get("content")
+            metadata = data.get("metadata")
+            if self.qmd_manager.update_qmd(path, content, metadata):
+                return KernelResponse(id=message.id, success=True, message_type="qmd_updated", data={"path": path})
+            return KernelResponse(id=message.id, success=False, error="Failed to update QMD")
+
+        elif action == "stats":
+            stats = self.qmd_manager.get_stats()
+            return KernelResponse(id=message.id, success=True, message_type="qmd_stats", data=stats)
+            
+        return KernelResponse(id=message.id, success=False, error=f"Unknown QMD action: {action}")
+        
+    async def _handle_update_config(self, message: KernelMessage) -> KernelResponse:
+        """Handle runtime configuration updates."""
+        config_updates = message.payload.get("config", {})
+        if not config_updates:
+            return KernelResponse(id=message.id, success=False, error="No config provided")
+            
+        # Update config
+        for key, value in config_updates.items():
+            # Special handling for api_keys: MERGE, don't overwrite
+            if key == "api_keys" and isinstance(value, dict):
+                current_keys = self.config.get("api_keys", {})
+                if isinstance(current_keys, dict):
+                    current_keys.update(value)
+                    self.config["api_keys"] = current_keys
+                else:
+                    self.config["api_keys"] = value
+                
+                if hasattr(self, 'runtime_config'):
+                    await self.runtime_config.set("api_keys", self.config["api_keys"])
+            else:
+                self.config[key] = value
+                # Persist if supported
+                if hasattr(self, 'runtime_config'):
+                    await self.runtime_config.set(key, value)
+            
+        # Apply specific updates
+        if "voice_enabled" in config_updates:
+            self._voice_enabled = config_updates["voice_enabled"]
+            
+        return KernelResponse(
+            id=message.id, 
+            success=True, 
+            message_type="config_updated", 
+            data={"config": self.config}
+        )
+
     async def _handle_voice(self, message: KernelMessage) -> KernelResponse:
         """Handle voice-related messages"""
         action = message.payload.get("action", "")
@@ -759,7 +1638,24 @@ class AetherKernel:
                 )
             
             if VOICE_AVAILABLE and self.voice_pipeline is not None:
+                # Signal speaking start
+                print(json.dumps({
+                    "id": message.id,
+                    "success": True,
+                    "message_type": "voice_status",
+                    "data": {"status": "speaking"}
+                }), flush=True)
+                
                 success = await self.voice_pipeline.speak(text)
+                
+                # Signal speaking end
+                print(json.dumps({
+                    "id": message.id,
+                    "success": True,
+                    "message_type": "voice_status",
+                    "data": {"status": "idle"}
+                }), flush=True)
+
                 return KernelResponse(
                     id=message.id,
                     success=success,
@@ -852,20 +1748,21 @@ class AetherKernel:
         request_id = message.payload.get("request_id")
         approved = message.payload.get("approved", False)
         intent = message.payload.get("intent", "")  # Original user intent if provided
-        
+
         if request_id in self.pending_actions:
-            action = self.pending_actions.get(request_id)
+            entry = self.pending_actions.pop(request_id)  # Remove immediately after retrieving
+            action = entry["action"] if isinstance(entry, dict) else entry
             if approved:
                 print(f"✅ Approval granted for: {action}", file=sys.stderr)
                 self.supervisor.register_approval(action)
-                
+
                 # === SELF-LEARNING: Learn from approved actions ===
                 try:
                     # Parse tool and args from action string
                     parts = action.split(" ", 1)
                     tool_name = parts[0] if parts else "unknown"
                     tool_args = parts[1] if len(parts) > 1 else ""
-                    
+
                     # Create action record for learning
                     record = create_action_record(
                         intent=intent or action,
@@ -874,16 +1771,15 @@ class AetherKernel:
                         result="approved",
                         approved=True
                     )
-                    
+
                     # Learn asynchronously (fire and forget)
-                    import asyncio
                     asyncio.create_task(self.learning_engine.learn_from_approval(record))
                     print(f"📚 Learning from approval: {tool_name}", file=sys.stderr)
-                    
+
                 except Exception as e:
                     print(f"⚠️ Learning failed (non-critical): {e}", file=sys.stderr)
                 # === END SELF-LEARNING ===
-                
+
                 return KernelResponse(
                     id=message.id,
                     success=True,
@@ -905,6 +1801,18 @@ class AetherKernel:
                 message_type="error",
                 error=f"Unknown request ID: {request_id}"
             )
+
+    def _cleanup_stale_pending_actions(self):
+        """Remove pending actions older than TTL to prevent memory leaks"""
+        now = time.time()
+        stale_ids = [
+            rid for rid, entry in self.pending_actions.items()
+            if isinstance(entry, dict) and (now - entry.get("created_at", 0)) > self._pending_actions_ttl
+        ]
+        for rid in stale_ids:
+            del self.pending_actions[rid]
+        if stale_ids:
+            print(f"🧹 Cleaned {len(stale_ids)} stale pending actions", file=sys.stderr)
             
     async def _handle_mcp_config(self, message: KernelMessage) -> KernelResponse:
         """Handle MCP Client configuration"""
@@ -941,7 +1849,66 @@ class AetherKernel:
             message_type="error",
             error=f"Unknown MCP action: {action}"
         )
-    
+    async def _handle_manage_model(self, message: KernelMessage) -> KernelResponse:
+        """Handle model management commands (list, switch, pull, delete)."""
+        if not self.brain or not self.brain.llm:
+            return KernelResponse(id=message.id, success=False, error="Brain/LLM not available")
+
+        action = message.payload.get("action")
+        model = message.payload.get("model")
+
+        try:
+            if action == "list":
+                models = await self.brain.llm.list_models()
+                active = self.brain.model
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="model_list",
+                    data={"models": models, "active": active}
+                )
+
+            elif action == "set":
+                if not model:
+                     return KernelResponse(id=message.id, success=False, error="Model name required")
+                success = await self.brain.change_model(model)
+                return KernelResponse(
+                    id=message.id,
+                    success=success,
+                    message_type="model_changed",
+                    data={"model": model, "success": success}
+                )
+
+            elif action == "pull":
+                if not model:
+                     return KernelResponse(id=message.id, success=False, error="Model name required")
+                # Trigger background pull with progress events
+                asyncio.create_task(self._background_pull_model(model))
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="model_pull_started",
+                    data={"model": model}
+                )
+
+            elif action == "delete":
+                if not model:
+                     return KernelResponse(id=message.id, success=False, error="Model name required")
+                success = await self.brain.delete_model(model)
+                return KernelResponse(
+                     id=message.id,
+                     success=success,
+                     message_type="model_deleted",
+                     data={"model": model, "success": success}
+                )
+            
+            else:
+                 return KernelResponse(id=message.id, success=False, error=f"Unknown model action: {action}")
+
+        except Exception as e:
+            return KernelResponse(id=message.id, success=False, error=str(e))
+
+
     async def _handle_learning_stats(self, message: KernelMessage) -> KernelResponse:
         """Handle learning statistics and analytics requests"""
         action = message.payload.get("action", "stats")
@@ -1103,25 +2070,7 @@ class AetherKernel:
                 error=f"Memory query failed: {e}"
             )
             
-    async def _handle_manage_model(self, message: KernelMessage) -> KernelResponse:
-        """Handle model management (pull/delete)"""
-        action = message.payload.get("action")
-        model = message.payload.get("model")
-        
-        if not action or not model:
-            return KernelResponse(id=message.id, success=False, message_type="error", error="Missing action or model")
-            
-        if action == "delete":
-            success = await self.brain.delete_model(model)
-            return KernelResponse(id=message.id, success=success, message_type="model_deleted", data={"model": model})
-            
-        elif action == "pull":
-            # Start background pull
-            asyncio.create_task(self._background_pull_model(model))
-            return KernelResponse(id=message.id, success=True, message_type="model_pull_started", data={"model": model})
-            
-        else:
-             return KernelResponse(id=message.id, success=False, message_type="error", error=f"Unknown action: {action}")
+    # NOTE: _handle_manage_model is defined above (lines ~1720-1786) — single canonical version
 
     async def _background_pull_model(self, model: str):
         """Pull model in background and emit events"""
@@ -1140,32 +2089,8 @@ class AetherKernel:
         except Exception as e:
             self._emit_event("model_download_complete", {"model": model, "success": False, "error": str(e)})
 
-    async def _handle_update_config(self, message: KernelMessage) -> KernelResponse:
-        """Handle runtime configuration updates — persists to disk via RuntimeConfig."""
-        key = message.payload.get("key")
-        value = message.payload.get("value")
-        
-        if key and value is not None:
-             # Update in-memory config
-             self.config[key] = value
-             
-             # Persist to disk via RuntimeConfig
-             await self.runtime_config.set(key, value)
-             
-             return KernelResponse(
-                id=message.id,
-                success=True,
-                message_type="config_updated",
-                data={"key": key, "value": value}
-            )
-        else:
-            return KernelResponse(
-                id=message.id,
-                success=False,
-                message_type="error",
-                error="Invalid config update request"
-            )
-    
+    # NOTE: _handle_update_config is defined above (lines ~1408-1430) — single canonical version
+
     async def _handle_index_document(self, message: KernelMessage) -> KernelResponse:
         """Handle document indexing for Tier 3 knowledge base"""
         action = message.payload.get("action", "index_file")
@@ -1347,7 +2272,249 @@ class AetherKernel:
                 error="Model router not initialized"
             )
     
-    
+    async def _handle_messaging(self, message: KernelMessage) -> KernelResponse:
+        """Handle messaging channel operations."""
+        if not self.channel_router:
+            return KernelResponse(id=message.id, success=False, error="Messaging system not available")
+            
+        action = message.payload.get("action")
+        
+        if action == "list_channels":
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="channel_list",
+                data={
+                    "channels": self.channel_router.get_channels_list(),
+                    "stats": self.channel_router.get_stats()
+                }
+            )
+            
+        elif action == "send":
+            channel = message.payload.get("channel")
+            recipient = message.payload.get("recipient")
+            text = message.payload.get("text")
+            
+            success = await self.channel_router.send(channel, recipient, text)
+            if success:
+                return KernelResponse(id=message.id, success=True, message_type="message_sent", data={"to": recipient})
+            return KernelResponse(id=message.id, success=False, error="Failed to send message")
+            
+        elif action == "broadcast":
+            text = message.payload.get("text")
+            results = await self.channel_router.broadcast(text)
+            return KernelResponse(
+                id=message.id, 
+                success=True, 
+                message_type="message_sent", 
+                data={"broadcast_results": results}
+            )
+            
+        elif action == "toggle_channel":
+            channel = message.payload.get("channel")
+            enable = message.payload.get("enable", True)
+            
+            if enable:
+                success = self.channel_router.enable_channel(ChannelType(channel))
+            else:
+                success = self.channel_router.disable_channel(ChannelType(channel))
+                
+            return KernelResponse(id=message.id, success=success, message_type="channel_config", data={"enabled": enable})
+
+        elif action == "history":
+            channel = message.payload.get("channel")
+            limit = message.payload.get("limit", 50)
+            history = self.channel_router.get_history(channel, limit)
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="message_history",
+                data={"messages": history}
+            )
+
+        return KernelResponse(id=message.id, success=False, error=f"Unknown messaging action: {action}")
+
+    async def _handle_plugin(self, message: KernelMessage) -> KernelResponse:
+        """Handle plugin management requests."""
+        if not self.plugin_system:
+            return KernelResponse(id=message.id, success=False, error="Plugin system not available")
+
+        action = message.payload.get("action", "list")
+
+        if action == "list":
+            plugins = self.plugin_system.list_plugins()
+            plugin_data = []
+            for p in plugins:
+                plugin_data.append({
+                    "name": p.manifest.name,
+                    "version": p.manifest.version,
+                    "description": p.manifest.description,
+                    "author": p.manifest.author,
+                    "state": p.state.value if hasattr(p.state, 'value') else str(p.state),
+                    "permissions": list(p.manifest.permissions) if hasattr(p.manifest, 'permissions') else [],
+                })
+            status = self.plugin_system.get_status()
+            return KernelResponse(
+                id=message.id, success=True,
+                message_type="plugin_list",
+                data={"plugins": plugin_data, **status}
+            )
+
+        elif action == "enable":
+            name = message.payload.get("name", "")
+            if not name:
+                return KernelResponse(id=message.id, success=False, error="Plugin name required")
+            try:
+                result = await self.plugin_system.load_plugin(name)
+                return KernelResponse(
+                    id=message.id, success=result,
+                    message_type="plugin_enabled",
+                    data={"name": name, "enabled": result}
+                )
+            except Exception as e:
+                return KernelResponse(id=message.id, success=False, error=str(e))
+
+        elif action == "disable":
+            name = message.payload.get("name", "")
+            if not name:
+                return KernelResponse(id=message.id, success=False, error="Plugin name required")
+            try:
+                result = await self.plugin_system.unload_plugin(name)
+                return KernelResponse(
+                    id=message.id, success=result,
+                    message_type="plugin_disabled",
+                    data={"name": name, "disabled": result}
+                )
+            except Exception as e:
+                return KernelResponse(id=message.id, success=False, error=str(e))
+
+        elif action == "reload":
+            name = message.payload.get("name", "")
+            if not name:
+                return KernelResponse(id=message.id, success=False, error="Plugin name required")
+            try:
+                await self.plugin_system.unload_plugin(name)
+                result = await self.plugin_system.load_plugin(name)
+                return KernelResponse(
+                    id=message.id, success=result,
+                    message_type="plugin_reloaded",
+                    data={"name": name, "reloaded": result}
+                )
+            except Exception as e:
+                return KernelResponse(id=message.id, success=False, error=str(e))
+
+        else:
+            return KernelResponse(id=message.id, success=False, error=f"Unknown plugin action: {action}")
+
+    async def _handle_deep_memory(self, message: KernelMessage) -> KernelResponse:
+        """Handle Tier 4 Deep Memory (knowledge graph) operations."""
+        if not self.deep_memory:
+            return KernelResponse(id=message.id, success=False, error="Deep Memory not available")
+
+        action = message.payload.get("action", "stats")
+
+        if action == "stats":
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data=self.deep_memory.get_stats()
+            )
+
+        elif action == "add_entity":
+            name = message.payload.get("name", "")
+            entity_type = message.payload.get("entity_type", "custom")
+            properties = message.payload.get("properties", {})
+            entity = self.deep_memory.add_entity(name=name, entity_type=entity_type, properties=properties)
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data={"entity_id": entity.id, "name": entity.name}
+            )
+
+        elif action == "add_edge":
+            source = message.payload.get("source_id", "")
+            target = message.payload.get("target_id", "")
+            edge_type = message.payload.get("edge_type", "related_to")
+            properties = message.payload.get("properties", {})
+            edge = self.deep_memory.add_edge(source_id=source, target_id=target, edge_type=edge_type, properties=properties)
+            if edge:
+                return KernelResponse(
+                    id=message.id, success=True, message_type="deep_memory_result",
+                    data={"edge_id": edge.id}
+                )
+            return KernelResponse(id=message.id, success=False, error="Failed to add edge (entity not found)")
+
+        elif action == "search":
+            query = message.payload.get("query", "")
+            entity_type = message.payload.get("entity_type")
+            limit = message.payload.get("limit", 20)
+            results = self.deep_memory.search_entities(query=query, entity_type=entity_type, limit=limit)
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data={"entities": [{"id": e.id, "name": e.name, "type": e.entity_type, "confidence": e.confidence, "properties": e.properties} for e in results]}
+            )
+
+        elif action == "neighbors":
+            entity_id = message.payload.get("entity_id", "")
+            max_hops = message.payload.get("max_hops", 2)
+            results = self.deep_memory.query_neighbors(entity_id=entity_id, max_hops=max_hops)
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data={"neighbors": [{"id": e.id, "name": e.name, "type": e.entity_type} for e in results]}
+            )
+
+        elif action == "preferences":
+            prefs = self.deep_memory.find_user_preferences()
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data={"preferences": [{"key": k, "value": v} for k, v in prefs]}
+            )
+
+        elif action == "patterns":
+            patterns = self.deep_memory.find_patterns()
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data={"patterns": [{"id": p.id, "name": p.name, "properties": p.properties} for p in patterns]}
+            )
+
+        elif action == "extract":
+            conversation = message.payload.get("conversation", "")
+            extracted = await self.deep_memory.extract_from_conversation(
+                conversation=conversation,
+                llm_fn=self.brain.generate if self.brain else None
+            )
+            return KernelResponse(
+                id=message.id, success=True, message_type="deep_memory_result",
+                data={"extracted_entities": extracted.get("entities", 0), "extracted_edges": extracted.get("edges", 0)}
+            )
+
+        return KernelResponse(id=message.id, success=False, error=f"Unknown deep_memory action: {action}")
+
+    async def _process_channel_message(self, msg) -> str:
+        """Process an inbound message from a channel through the AI Brain."""
+        if not self.brain:
+            return "Thinking..."
+
+        # Format prompt for the AI
+        user_text = msg.content
+        sender = msg.sender
+        channel = msg.channel
+        
+        # Check for simple intent/commands first
+        # (Could use IntentDispatcher here but let's keep it simple for now)
+        
+        prompt = f"""
+        User '{sender}' via {channel}: "{user_text}"
+        
+        Respond naturally as Nexus. Keep it concise for chat interfaces.
+        """
+        
+        try:
+            # Use the brain to generate a response
+            response = await self.brain.think(prompt)
+            return response
+        except Exception as e:
+            print(f"Error processing channel message: {e}", file=sys.stderr)
+            return "I'm having trouble thinking right now."
+
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the LLM - Neural Link Persona"""
         
@@ -1380,32 +2547,8 @@ INTERACTION MODES:
 User context: Administrator access granted.
 """
 
-    async def _handle_update_config(self, message: KernelMessage) -> KernelResponse:
-        """Handle configuration updates"""
-        try:
-            updates = message.payload.get("config", {})
-            for key, value in updates.items():
-                self.config[key] = value
-                
-                # Handle side effects
-                if key == "voice_enabled" and value != self._voice_enabled:
-                    self._voice_enabled = value
-                    # Trigger voice logic if needed
-                    
-            return KernelResponse(
-                id=message.id,
-                success=True,
-                message_type="config_updated",
-                data={"config": self.config}
-            )
-        except Exception as e:
-            return KernelResponse(
-                id=message.id,
-                success=False,
-                message_type="error",
-                error=str(e)
-            )
-    
+    # NOTE: _handle_update_config is defined above — single canonical version
+
     def _emit_status(self, status: str, detail: Optional[str] = None, data: Optional[Dict] = None):
         """Emit a kernel status event"""
         payload = {
@@ -1423,6 +2566,53 @@ User context: Administrator access granted.
             "data": payload
         }), flush=True)
 
+    async def _handle_openclaw_message(self, data: Dict[str, Any]):
+        """Handle incoming messages from OpenClaw Gateway"""
+        print(f"📨 OpenClaw Message: {str(data)[:200]}", file=sys.stderr)
+        
+        try:
+            # Extract message content
+            msg_type = data.get("type")
+            content = data.get("content", {})
+            sender = data.get("sender")
+            channel = data.get("channel")
+            
+            # === NEW: Emit OpenClaw Event to Frontend ===
+            self._emit_event("openclaw_message", {
+                "type": msg_type,
+                "sender": sender,
+                "channel": channel,
+                "content": content,
+                "timestamp": time.time()
+            })
+            
+            if msg_type == "inbound_message":
+                text = content.get("text", "")
+                
+                # Treat as a user query
+                # Create a synthetic KernelMessage
+                message = KernelMessage(
+                    id=f"openclaw_{int(time.time())}",
+                    message_type="query",
+                    payload={
+                        "query": text,
+                        "context_mode": "chat",
+                        "channel": channel,
+                        "sender": sender
+                    }
+                )
+                
+                # Process response
+                response = await self.process_message(message)
+                
+                # Send reply back via OpenClaw
+                if response.success and response.data and "response" in response.data:
+                    reply_text = response.data["response"]
+                    if self.openclaw_client:
+                        await self.openclaw_client.send_message(channel, sender, reply_text)
+        except Exception as e:
+            print(f"⚠️ OpenClaw handler error: {e}", file=sys.stderr)
+
     async def run(self):
         """Main run loop - reads from stdin, writes to stdout"""
         self.running = True
@@ -1431,6 +2621,18 @@ User context: Administrator access granted.
         # Emit startup status
         self._emit_status("starting", "Kernel initializing...")
         print("🚀 Aether Kernel running...", file=sys.stderr)
+        
+        # Start Cron Service
+        if self.cron:
+            await self.cron.initialize()
+            await self.cron.start()
+
+        # Start OpenClaw Bridge (Gap 2)
+        if self.openclaw_client:
+            self.openclaw_client.set_callback(self._handle_openclaw_message)
+            # Run in background task to not block loop
+            asyncio.create_task(self.openclaw_client.connect())
+            print("🔗 OpenClaw bridge connecting...", file=sys.stderr)
         
         # Initialize voice if enabled
         if self._voice_enabled and self.voice_pipeline:
@@ -1472,6 +2674,13 @@ User context: Administrator access granted.
             print("\n🛑 Shutting down Aether Kernel...", file=sys.stderr)
             self.running = False
             self._emit_status("stopping", "Kernel shutting down...")
+            
+            # Sync session memory to disk
+            try:
+                self.memory.sync_session_file()
+                print("💾 Session memory synced", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Session sync failed: {e}", file=sys.stderr)
             
             # Shutdown voice
             if self.voice_pipeline:

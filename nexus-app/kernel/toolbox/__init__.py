@@ -11,6 +11,8 @@ from .notification_tools import (
     EmailSender, EmailConfig, DesktopNotifier, SMSNotifier,
     NotificationManager, NotificationResult, NotificationPriority
 )
+from .browser_engine import BrowserEngine, BrowseResult, ScreenshotResult
+from .media_pipeline import MediaPipeline, CaptureResult, VisionAnalysis
 
 class Toolbox:
     """
@@ -26,7 +28,9 @@ class Toolbox:
         self.shell = ShellExecutor()
         self.files = FileManager()
         self.web = WebAutomation()
-        
+        self.browser = BrowserEngine()
+        self.media = MediaPipeline()
+
         # Tool registry for dynamic dispatch
         self._tools = {
             "shell": self.shell,
@@ -36,7 +40,11 @@ class Toolbox:
             "write_file": self.files,
             "list_dir": self.files,
             "web": self.web,
-            "http": self.web
+            "http": self.web,
+            "browse": self.browser,
+            "screenshot": self.browser,
+            "capture_screen": self.media,
+            "analyze_image": self.media,
         }
         
         # Dynamic tools (functions/callables)
@@ -151,7 +159,27 @@ class Toolbox:
                 error=None,
                 exit_code=0
             )
-        
+
+        elif tool_name == "browse":
+            url = args[0] if args else kwargs.get("url", "")
+            result = await self.browser.browse(url)
+            return ToolResult(success=result.success, output=result, error=result.error)
+
+        elif tool_name == "screenshot":
+            full_page = kwargs.get("full_page", False)
+            result = await self.browser.screenshot(full_page=full_page)
+            return ToolResult(success=True, output=result)
+
+        elif tool_name == "capture_screen":
+            result = await self.media.capture_screen()
+            return ToolResult(success=result.success, output=result, error=result.error)
+
+        elif tool_name == "analyze_image":
+            path = args[0] if args else kwargs.get("path", "")
+            prompt = kwargs.get("prompt", "Describe what you see.")
+            result = await self.media.analyze_image(path, prompt)
+            return ToolResult(success=True, output=result)
+
         return ToolResult(
             success=False,
             output=None,
@@ -167,7 +195,11 @@ class Toolbox:
             {"name": "write_file", "description": "Write content to file", "args": {"path": "string", "content": "string"}},
             {"name": "list_dir", "description": "List directory contents", "args": {"path": "string"}},
             {"name": "http", "description": "Make HTTP request", "args": {"url": "string", "method": "string"}},
-            {"name": "open_editor", "description": "Open file in code editor", "args": {"path": "string"}}
+            {"name": "open_editor", "description": "Open file in code editor", "args": {"path": "string"}},
+            {"name": "browse", "description": "Navigate to URL and extract page content", "args": {"url": "string"}},
+            {"name": "screenshot", "description": "Take a browser screenshot", "args": {"full_page": "boolean"}},
+            {"name": "capture_screen", "description": "Capture desktop screenshot", "args": {"region": "optional tuple"}},
+            {"name": "analyze_image", "description": "Analyze image with AI vision", "args": {"path": "string", "prompt": "string"}},
         ]
         
         # Add dynamic tools
@@ -206,8 +238,10 @@ class ToolResult:
 
 
 __all__ = [
-    "Toolbox", "ToolResult", 
+    "Toolbox", "ToolResult",
     "ShellExecutor", "FileManager", "WebAutomation",
+    "BrowserEngine", "BrowseResult", "ScreenshotResult",
+    "MediaPipeline", "CaptureResult", "VisionAnalysis",
     "EmailSender", "EmailConfig", "DesktopNotifier", "SMSNotifier",
-    "NotificationManager", "NotificationResult", "NotificationPriority"
+    "NotificationManager", "NotificationResult", "NotificationPriority",
 ]

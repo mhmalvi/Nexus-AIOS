@@ -1,0 +1,13 @@
+As this is an AI-based operating system, so I want you to do some end-to-end audit and analysis of the whole codebase. So the problems that we are facing is that I         
+  don't think so the front end is properly connected with the back end because the front end is not working. The features and functions on the front end are not working.     
+   Also, I think the back end, there are so many back-end functions and features that wasn't implemented in the front end. So this application should be updated as well.     
+   So I want you to look into that issue as well as one of the main and core feature of this operating system is that this is AI operating system. So right now,              
+  previously, we had agents in this AI agents in this operating system as well as vector memory. So after that, we integrated OpenGlow into this system. So right now, I      
+  want you to run complete analysis of this whole codebase end-to-end and find the gaps and issues. Primarily, the core focus is the agentic operating system. So I want        the whole agentic system or agents and AI and autonomous working and tools and functions all are working properly as this is an AI-based operating system. So I want        
+  you to look into those issues as well. Additionally, the operating system. We should have the function and features of OpenCLaw that are beneficial for our system. We        need to remind you that our core goal is for AI operating system with agentic workflows and execution. So autonomous execution is one of the main things. So we need to   
+   be able to make sure that all the agents are AI conscious and using AI to perform or aggregate multiple operations using multiple tools, MCPs, APIs, you name it, all  
+  sorts of things. So I want you to look into these things and make sure that this AI, this operating system that we are going to boot on another machine as an ISO file.     
+   So are we on the same page or how far are we from that? So this is a Linux-based, so we are using Arch Linux and make Arch iOS systems and packages to build iOS with      
+  all the features and functionalities of Linux as well as these OpenCLaw and other external tools. And we also developed a new shell or UI for the system. So all should     
+   be working properly in a nice manner. So before that, I want you to run complete analysis, very, very, very in-depth analysis and find the root causes and gaps in         
+  order to achieve this goal.

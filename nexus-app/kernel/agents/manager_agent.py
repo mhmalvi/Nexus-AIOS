@@ -3,6 +3,7 @@ Nexus Manager Agent - Task Orchestration
 Decomposes tasks and coordinates worker agents
 """
 
+import asyncio
 from typing import Dict, Any, List, Optional
 from .worker_agent import StepResult
 
@@ -10,7 +11,7 @@ from .worker_agent import StepResult
 class ManagerAgent:
     """Manager Agent - Orchestrates Multi-Step Tasks"""
     
-    def __init__(self, brain, worker, security_auditor=None, code_architect=None, researcher=None, qa_engineer=None, failure_limit: int = 3):
+    def __init__(self, brain, worker, security_auditor=None, code_architect=None, researcher=None, qa_engineer=None, failure_limit: int = 3, memory=None):
         self.brain = brain
         self.worker = worker
         self.security_auditor = security_auditor
@@ -18,6 +19,7 @@ class ManagerAgent:
         self.researcher = researcher
         self.qa_engineer = qa_engineer
         self.max_retries = failure_limit
+        self.memory = memory  # Memory manager for persisting task results
     
     async def execute_task(self, description: str, auto_approve: bool = False) -> Dict[str, Any]:
         """Execute a complete task"""
@@ -58,88 +60,155 @@ class ManagerAgent:
         self._emit_tao("THOUGHT", f"Plan created with {len(plan.steps)} steps", details={"steps": [s.action for s in plan.steps]})
         
         results = []
+        results_by_id: Dict[str, StepResult] = {}
         retry_count = 0
-        
-        for step in plan.steps:
-            # TAO: Emission - Thought (Next step)
-            self._emit_tao("THOUGHT", f"Starting step: {step.action}", step.id)
-            
-            result = None
-            
-            # TAO: Emission - Action
-            self._emit_tao("ACTION", f"Executing tool: {step.tool}", step.id, details={"tool": step.tool, "args": step.args})
+        failed = False
 
-            # Dispatch based on tool
-            if step.tool == "security_audit" and self.security_auditor:
-                try:
-                    audit_res = await self.security_auditor.audit_code(
-                         code=step.args.get("code", ""), 
-                         language=step.args.get("language", "python")
-                    )
-                    result = StepResult(step_id=step.id, success=True, output=audit_res, error=None)
-                except Exception as e:
-                    result = StepResult(step_id=step.id, success=False, output=None, error=str(e))
-            
-            elif step.tool == "architect_design" and self.code_architect:
-                try:
-                    design_res = await self.code_architect.design_feature(
-                        requirements=step.args.get("requirements", "")
-                    )
-                    result = StepResult(step_id=step.id, success=True, output=design_res, error=None)
-                except Exception as e:
-                    result = StepResult(step_id=step.id, success=False, output=None, error=str(e))
-                    
-            elif step.tool == "research_topic" and self.researcher:
-                try:
-                    res = await self.researcher.research_topic(
-                        topic=step.args.get("topic", ""),
-                        urls=step.args.get("urls", [])
-                    )
-                    result = StepResult(step_id=step.id, success=res["success"], output=res, error=res.get("error"))
-                except Exception as e:
-                    result = StepResult(step_id=step.id, success=False, output=None, error=str(e))
-            
-            elif step.tool == "generate_tests" and self.qa_engineer:
-                try:
-                    res = await self.qa_engineer.generate_tests(
-                        target_file=step.args.get("target_file", ""),
-                        context=step.args.get("context", "")
-                    )
-                    result = StepResult(step_id=step.id, success=res["success"], output=res, error=res.get("error"))
-                except Exception as e:
-                    result = StepResult(step_id=step.id, success=False, output=None, error=str(e))
-            
-            else:
-                # Default to Worker Agent
-                result = await self.worker.execute_step(
-                    step={"id": step.id, "tool": step.tool, "action": step.action, "args": step.args},
-                    context=description
+        # Build execution waves: group steps whose dependencies are all satisfied
+        remaining = list(plan.steps)
+
+        while remaining and not failed:
+            # Find steps whose dependencies are all completed successfully
+            ready = []
+            still_waiting = []
+            for step in remaining:
+                deps_met = all(
+                    dep_id in results_by_id and results_by_id[dep_id].success
+                    for dep_id in (step.depends_on or [])
                 )
-            
-            # TAO: Emission - Observation
-            self._emit_tao("OBSERVATION", f"Step result: {'Success' if result.success else 'Failed'}", step.id, details={"output": str(result.output)[:200], "error": result.error})
-            
-            results.append(result)
-            
-            if not result.success:
-                if result.needs_retry and retry_count < self.max_retries:
-                    # Try correction
-                    retry_count += 1
-                    corrected_result = await self._retry_with_correction(step, result.correction, description)
-                    results.append(corrected_result)
-                    if not corrected_result.success:
-                        break
+                if deps_met:
+                    ready.append(step)
                 else:
-                    break
-        
+                    # Check if any dependency failed (unrecoverable)
+                    deps_failed = any(
+                        dep_id in results_by_id and not results_by_id[dep_id].success
+                        for dep_id in (step.depends_on or [])
+                    )
+                    if deps_failed:
+                        # Skip this step — a dependency failed
+                        result = StepResult(step_id=step.id, success=False, output=None,
+                                            error=f"Skipped: dependency failed")
+                        results.append(result)
+                        results_by_id[step.id] = result
+                    else:
+                        still_waiting.append(step)
+
+            if not ready:
+                # No steps can proceed — all remaining are blocked
+                for step in still_waiting:
+                    result = StepResult(step_id=step.id, success=False, output=None,
+                                        error="Blocked: unresolvable dependency")
+                    results.append(result)
+                    results_by_id[step.id] = result
+                break
+
+            remaining = still_waiting
+
+            # Execute ready steps in parallel if multiple, sequential if single
+            if len(ready) > 1:
+                self._emit_tao("THOUGHT", f"Executing {len(ready)} independent steps in parallel",
+                               details={"steps": [s.action for s in ready]})
+
+            async def _execute_single_step(step):
+                self._emit_tao("ACTION", f"Executing tool: {step.tool}", step.id,
+                               details={"tool": step.tool, "args": step.args})
+                return await self._dispatch_step(step, description)
+
+            if len(ready) == 1:
+                step = ready[0]
+                self._emit_tao("THOUGHT", f"Starting step: {step.action}", step.id)
+                result = await _execute_single_step(step)
+                wave_results = [(step, result)]
+            else:
+                tasks = [_execute_single_step(s) for s in ready]
+                raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+                wave_results = []
+                for step, res in zip(ready, raw_results):
+                    if isinstance(res, Exception):
+                        res = StepResult(step_id=step.id, success=False, output=None, error=str(res))
+                    wave_results.append((step, res))
+
+            # Process wave results
+            for step, result in wave_results:
+                self._emit_tao("OBSERVATION",
+                               f"Step result: {'Success' if result.success else 'Failed'}",
+                               step.id,
+                               details={"output": str(result.output)[:200], "error": result.error})
+                results.append(result)
+                results_by_id[step.id] = result
+
+                if not result.success:
+                    if hasattr(result, 'needs_retry') and result.needs_retry and retry_count < self.max_retries:
+                        retry_count += 1
+                        corrected = await self._retry_with_correction(step, result.correction, description)
+                        results.append(corrected)
+                        results_by_id[step.id] = corrected
+                        if not corrected.success:
+                            failed = True
+                    else:
+                        failed = True
+
         success = all(r.success for r in results)
-        
-        return {
+
+        task_result = {
             "success": success,
             "task": description,
             "steps_executed": len(results),
+            "parallel_waves": len([r for r in results if r.success]),
             "results": [{"step": r.step_id, "success": r.success, "output": r.output, "error": r.error} for r in results]
         }
+
+        # Persist task result to memory for cross-session recall
+        await self._persist_task_result(description, task_result)
+
+        return task_result
+
+    async def _dispatch_step(self, step, description: str) -> StepResult:
+        """Dispatch a single step to the appropriate agent or worker."""
+        if step.tool == "security_audit" and self.security_auditor:
+            try:
+                audit_res = await self.security_auditor.audit_code(
+                    code=step.args.get("code", ""),
+                    language=step.args.get("language", "python")
+                )
+                return StepResult(step_id=step.id, success=True, output=audit_res, error=None)
+            except Exception as e:
+                return StepResult(step_id=step.id, success=False, output=None, error=str(e))
+
+        elif step.tool == "architect_design" and self.code_architect:
+            try:
+                design_res = await self.code_architect.design_feature(
+                    requirements=step.args.get("requirements", "")
+                )
+                return StepResult(step_id=step.id, success=True, output=design_res, error=None)
+            except Exception as e:
+                return StepResult(step_id=step.id, success=False, output=None, error=str(e))
+
+        elif step.tool == "research_topic" and self.researcher:
+            try:
+                res = await self.researcher.research_topic(
+                    topic=step.args.get("topic", ""),
+                    urls=step.args.get("urls", [])
+                )
+                return StepResult(step_id=step.id, success=res["success"], output=res, error=res.get("error"))
+            except Exception as e:
+                return StepResult(step_id=step.id, success=False, output=None, error=str(e))
+
+        elif step.tool == "generate_tests" and self.qa_engineer:
+            try:
+                res = await self.qa_engineer.generate_tests(
+                    target_file=step.args.get("target_file", ""),
+                    context=step.args.get("context", "")
+                )
+                return StepResult(step_id=step.id, success=res["success"], output=res, error=res.get("error"))
+            except Exception as e:
+                return StepResult(step_id=step.id, success=False, output=None, error=str(e))
+
+        else:
+            return await self.worker.execute_step(
+                step={"id": step.id, "tool": step.tool, "action": step.action, "args": step.args},
+                context=description
+            )
     
     async def _retry_with_correction(self, step, correction: str, context: str):
         """Retry a step with correction applied"""
@@ -176,8 +245,6 @@ class ManagerAgent:
         Returns:
             Aggregated analysis from all consulted agents
         """
-        import asyncio
-        
         agents_to_consult = include_agents or ["security", "architect", "researcher", "qa"]
         consultation_tasks = []
         agent_names = []
@@ -282,6 +349,29 @@ Unified Recommendation:"""
                     content = str(opinion)
                 formatted.append(f"[{agent.upper()}]: {content}")
         return "\n\n".join(formatted)
+
+    async def _persist_task_result(self, description: str, task_result: Dict[str, Any]):
+        """Persist a completed task result to Tier 2 (short-term) memory for cross-session recall."""
+        if not self.memory:
+            return
+        try:
+            success = task_result.get("success", False)
+            steps = task_result.get("steps_executed", 0)
+            summary = f"Task {'completed' if success else 'failed'}: {description} ({steps} steps)"
+            await self.memory.store(
+                content=summary,
+                tier="short_term",
+                metadata={
+                    "source": "manager_agent",
+                    "type": "task_result",
+                    "success": success,
+                    "steps_executed": steps,
+                    "task_description": description,
+                }
+            )
+        except Exception as e:
+            import sys
+            print(f"⚠️ Memory persistence failed: {e}", file=sys.stderr)
 
     def _emit_tao(self, tao_type: str, content: str, step_id: str = None, details: Dict[str, Any] = None):
         """Emit a Thought-Action-Observation event via stdout for UI visualization"""
