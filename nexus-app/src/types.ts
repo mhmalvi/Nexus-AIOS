@@ -30,12 +30,13 @@ export interface Artifact {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'openclaw';
   content: string;
   timestamp: Date;
   tool?: 'terminal' | 'browser' | 'search' | 'code';
   reactions?: string[];
   relatedArtifactId?: string;
+  metadata?: { sender?: string; channel?: string };
 }
 
 export interface Conversation {
@@ -112,6 +113,14 @@ export interface Notification {
   read: boolean;
 }
 
+export interface Toast {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error' | 'insight';
+  timestamp: Date;
+}
+
 export interface SearchResult {
   id: string;
   type: 'window' | 'message' | 'artifact' | 'action';
@@ -141,6 +150,7 @@ export interface AppState {
   artifacts: Artifact[];
   windows: Record<string, WindowState>;
   notifications: Notification[];
+  toasts: Toast[];
   activeWindowId: string | null;
   selectedAsset: Asset | null;
 }

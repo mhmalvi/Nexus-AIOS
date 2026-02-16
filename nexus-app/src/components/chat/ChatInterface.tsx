@@ -7,6 +7,7 @@ import { ActionRequest, Conversation } from "../../types";
 import ReactMarkdown from 'react-markdown';
 import { Plus, MessageSquare, Trash2, Copy, RefreshCw, Check, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, X, Mic, MicOff } from 'lucide-react';
 import { ChannelExplorer } from './ChannelExplorer';
+import { mockTauri } from '../../services/mockTauri';
 
 export function ChatInterface() {
     const {
@@ -67,6 +68,23 @@ export function ChatInterface() {
             console.warn("Could not persist conversations");
         }
     }, [conversations]);
+
+    // Subscribe to OpenClaw messages — show inbound messages inline in chat
+    useEffect(() => {
+        const unsub = mockTauri.subscribeOpenClaw((msg: any) => {
+            const sender = msg.sender || 'Unknown';
+            const channel = msg.channel || msg.platform || 'openclaw';
+            const content = typeof msg.content === 'string' ? msg.content : (msg.content?.text || 'New message');
+            addMessage({
+                id: `oc-chat-${Date.now()}`,
+                role: 'openclaw',
+                content,
+                timestamp: new Date(),
+                metadata: { sender, channel },
+            });
+        });
+        return () => unsub();
+    }, [addMessage]);
 
     const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
         setInput(e.target.value);
@@ -294,17 +312,24 @@ export function ChatInterface() {
                                             scale: isOld ? 0.98 : 1
                                         }}
                                         transition={{ duration: 0.8, ease: "easeOut" }}
-                                        className={`group flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                                        className={`group flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} ${msg.role === 'openclaw' ? 'border-l-2 border-cyan-500/30 pl-4' : ''}`}
                                     >
-                                        <span className={`text-[10px] tracking-[0.2em] uppercase mb-2 opacity-40 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
-                                            {msg.role === 'user' ? 'Architect' : 'Echoes'}
+                                        <span className={`text-[10px] tracking-[0.2em] uppercase mb-2 opacity-40 ${msg.role === 'user' ? 'text-right' : 'text-left'} ${msg.role === 'openclaw' ? 'text-cyan-400' : ''}`}>
+                                            {msg.role === 'user' ? 'Architect' : msg.role === 'openclaw' ? `OpenClaw \u00B7 ${msg.metadata?.sender || msg.metadata?.channel || ''}` : 'Echoes'}
                                         </span>
 
                                         <div className={`relative max-w-[90%] text-lg md:text-xl font-light leading-relaxed ${msg.role === 'user'
                                             ? 'text-right text-foreground'
-                                            : 'text-left text-primary/90 text-glow'
+                                            : msg.role === 'openclaw'
+                                                ? 'text-left text-cyan-400/90'
+                                                : 'text-left text-primary/90 text-glow'
                                             }`}>
-                                            {msg.role === 'user' ? (
+                                            {msg.role === 'openclaw' ? (
+                                                <div className="flex items-start gap-2">
+                                                    <MessageSquare className="w-4 h-4 text-cyan-500 mt-1.5 shrink-0" />
+                                                    <span>{msg.content}</span>
+                                                </div>
+                                            ) : msg.role === 'user' ? (
                                                 msg.content
                                             ) : (
                                                 <ReactMarkdown

@@ -146,19 +146,33 @@ function App() {
         }
       });
 
-      // 3. Auto-start the Python kernel
+      // 3. Auto-start the Python kernel with stage toasts
+      addNotification({
+        title: "Kernel Starting",
+        message: "Initializing AetherOS neural kernel...",
+        type: "info"
+      });
+
       import('./services/tauriApi').then(async ({ kernelApi }) => {
         try {
           const status = await kernelApi.getStatus();
           if (status.status !== 'running') {
-            console.log("🚀 Auto-starting kernel...");
+            console.log("Auto-starting kernel...");
             const result = await kernelApi.start();
             if (result.success) {
               addNotification({
-                title: "Kernel Started",
-                message: "AetherOS neural kernel is now online.",
-                type: "success"
+                title: "Voice Engine Loading",
+                message: "Kernel online. Loading voice subsystem...",
+                type: "info"
               });
+              // Brief delay before "ready" toast
+              setTimeout(() => {
+                addNotification({
+                  title: "Kernel Ready",
+                  message: "AetherOS neural kernel is fully online.",
+                  type: "success"
+                });
+              }, 1500);
             } else {
               addNotification({
                 title: "Kernel Failed",
@@ -166,6 +180,12 @@ function App() {
                 type: "error"
               });
             }
+          } else {
+            addNotification({
+              title: "Kernel Ready",
+              message: "AetherOS neural kernel is already online.",
+              type: "success"
+            });
           }
         } catch (e) {
           console.warn("Failed to auto-start kernel:", e);

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { MessageSquare, Send, RefreshCw, Hash, Phone, Globe, Wifi, WifiOff, ChevronRight, Settings, Search, ToggleLeft, ToggleRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { messagingApi, KernelResponse } from "../../services/tauriApi";
+import { mockTauri } from "../../services/mockTauri";
 
 interface Channel {
     type: string;
@@ -45,7 +46,7 @@ export function MessagingDashboard() {
     // Fetch channels on mount
     useEffect(() => {
         fetchChannels();
-        const interval = setInterval(fetchChannels, 15000);
+        const interval = setInterval(fetchChannels, 30000);
         return () => clearInterval(interval);
     }, []);
 
@@ -54,6 +55,33 @@ export function MessagingDashboard() {
         if (selectedChannel) {
             fetchHistory(selectedChannel);
         }
+    }, [selectedChannel]);
+
+    // Subscribe to real-time openclaw events
+    useEffect(() => {
+        const unsub = mockTauri.subscribeOpenClaw((msg: any) => {
+            const channelType = msg.channel || msg.platform || 'unknown';
+            // Append message if it matches the currently selected channel
+            if (selectedChannel && channelType === selectedChannel) {
+                const newMsg: Message = {
+                    id: `oc-${Date.now()}`,
+                    channel: channelType,
+                    direction: 'inbound',
+                    sender: msg.sender || 'Unknown',
+                    content: typeof msg.content === 'string' ? msg.content : (msg.content?.text || 'New message'),
+                    timestamp: new Date().toISOString(),
+                };
+                setMessages(prev => [...prev, newMsg]);
+                // Scroll to bottom
+                const container = messagesEndRef.current?.parentElement;
+                if (container) {
+                    setTimeout(() => container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' }), 50);
+                }
+            }
+            // Refresh channel list for updated counts
+            fetchChannels();
+        });
+        return () => unsub();
     }, [selectedChannel]);
 
     const fetchChannels = async () => {
@@ -79,7 +107,11 @@ export function MessagingDashboard() {
             const res = await messagingApi.getHistory(channel, 50);
             if (res?.success && res?.data?.messages) {
                 setMessages(res.data.messages);
-                setTimeout(() => messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' }), 100);
+                // Use scrollTo on the container instead of scrollIntoView (prevents ancestor scroll)
+                setTimeout(() => {
+                    const container = messagesEndRef.current?.parentElement;
+                    if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                }, 100);
             } else {
                 setMessages([]);
             }

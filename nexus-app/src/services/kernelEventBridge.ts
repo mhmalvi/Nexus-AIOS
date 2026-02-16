@@ -89,6 +89,7 @@ class KernelEventBridge {
       'query_memory': ['memory_results', 'memory_query_result'],
       'store_memory': ['memory_stored', 'memory_store_result'],
       'delete_memory': ['memory_deleted'],
+      'manage_memory': ['memory_cleared'],
       'security': ['security_status', 'destruct_result', 'destruct_cancel'],
       'firewall': ['firewall_rules', 'firewall_rule_added', 'firewall_rule_deleted', 'firewall_logs', 'firewall_updated', 'firewall_status'],
       'cron': ['cron_jobs', 'cron_job_added', 'cron_job_removed', 'cron_result', 'cron_list'],
@@ -151,8 +152,8 @@ class KernelEventBridge {
     timeoutMs?: number
   ): Promise<any> {
     if (!isTauri) {
-      // In browser mode, fall back to mock invoke
-      return null;
+      // In browser mode, return a safe empty response (never null — callers expect .success/.data)
+      return { success: false, message_type: messageType, data: null, error: 'Kernel not available in browser mode' };
     }
 
     await this.init();

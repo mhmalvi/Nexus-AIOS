@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Agent, VoiceSettings, Asset, Conversation } from '../types';
+import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Toast, Agent, VoiceSettings, Asset, Conversation } from '../types';
 import { getCenterPosition, getCascadePosition, clampWindowPosition, clampWindowSize, getSafeWorkArea, HEADER_HEIGHT, DOCK_HEIGHT, STATUS_BAR_HEIGHT } from '../services/WindowBounds';
 import { mockTauri } from '../services/mockTauri';
 
@@ -42,6 +42,7 @@ interface StoreContextType extends AppState {
   addNotification: (notification: Omit<Notification, 'id' | 'read' | 'timestamp'>) => void;
   markNotificationRead: (id: string) => void;
   clearNotifications: () => void;
+  removeToast: (id: string) => void;
   updateAgentStatus: (id: string, updates: Partial<Agent>) => void;
   setSelectedAsset: (asset: Asset | null) => void;
   // Conversation management
@@ -222,6 +223,7 @@ const initialState: AppState = {
   artifacts: [],
   windows: getInitialWindows(),
   notifications: [],
+  toasts: [],
   activeWindowId: 'echoes',
   selectedAsset: null,
 };
@@ -259,6 +261,8 @@ type Action =
   | { type: 'ADD_NOTIFICATION'; payload: Notification }
   | { type: 'MARK_NOTIFICATION_READ'; payload: string }
   | { type: 'CLEAR_NOTIFICATIONS' }
+  | { type: 'ADD_TOAST'; payload: Toast }
+  | { type: 'REMOVE_TOAST'; payload: string }
   | { type: 'UPDATE_AGENT'; payload: { id: string, updates: Partial<Agent> } }
   | { type: 'SET_SELECTED_ASSET'; payload: Asset | null }
   | { type: 'DELETE_MESSAGE'; payload: string }
@@ -493,7 +497,18 @@ function storeReducer(state: AppState & { thoughtStream: ThoughtEvent[], isComma
       return { ...state, windows };
     }
     case 'ADD_NOTIFICATION':
-      return { ...state, notifications: [action.payload, ...state.notifications] };
+      return {
+        ...state,
+        notifications: [action.payload, ...state.notifications],
+        toasts: [
+          { id: `toast-${action.payload.id}`, title: action.payload.title, message: action.payload.message, type: action.payload.type, timestamp: action.payload.timestamp },
+          ...state.toasts
+        ].slice(0, 4),
+      };
+    case 'ADD_TOAST':
+      return { ...state, toasts: [action.payload, ...state.toasts].slice(0, 4) };
+    case 'REMOVE_TOAST':
+      return { ...state, toasts: state.toasts.filter(t => t.id !== action.payload) };
     case 'MARK_NOTIFICATION_READ':
       return { ...state, notifications: state.notifications.map(n => n.id === action.payload ? { ...n, read: true } : n) };
     case 'CLEAR_NOTIFICATIONS':
@@ -782,6 +797,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     }),
     markNotificationRead: (id: string) => dispatch({ type: 'MARK_NOTIFICATION_READ', payload: id }),
     clearNotifications: () => dispatch({ type: 'CLEAR_NOTIFICATIONS' }),
+    removeToast: (id: string) => dispatch({ type: 'REMOVE_TOAST', payload: id }),
     updateAgentStatus: (id: string, updates: Partial<Agent>) => dispatch({ type: 'UPDATE_AGENT', payload: { id, updates } }),
     setSelectedAsset: (asset: Asset | null) => dispatch({ type: 'SET_SELECTED_ASSET', payload: asset }),
     deleteMessage: (id: string) => dispatch({ type: 'DELETE_MESSAGE', payload: id }),

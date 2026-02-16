@@ -160,8 +160,9 @@ export function StatusBar() {
     const kernelRunning = kernelStatus === 'running';
     const pidDisplay = kernelPid || '—';
 
-    const statusDot = isProcessing ? 'bg-green-500 animate-pulse' : kernelRunning ? 'bg-blue-500' : 'bg-orange-400';
-    const statusLabel = isProcessing ? 'ACTIVE' : kernelRunning ? 'KERNEL' : 'IDLE';
+    const kernelStarting = kernelStatus === 'starting';
+    const statusDot = isProcessing ? 'bg-green-500 animate-pulse' : kernelStarting ? 'bg-yellow-500 animate-pulse' : kernelRunning ? 'bg-blue-500' : 'bg-orange-400';
+    const statusLabel = isProcessing ? 'ACTIVE' : kernelStarting ? 'STARTING' : kernelRunning ? 'KERNEL' : 'IDLE';
 
     // Color-code CPU based on load
     const cpuColor = telemetry.cpuPercent > 80 ? 'text-destructive' : telemetry.cpuPercent > 50 ? 'text-yellow-500' : 'text-muted-foreground';

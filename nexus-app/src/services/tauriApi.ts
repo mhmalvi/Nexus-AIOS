@@ -374,6 +374,14 @@ export const kernelApi = {
     },
 
     manageModel: async (action: 'pull' | 'delete', model: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action, model }), 'manage_model'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action, model }),
             messageType: 'manage_model'
@@ -381,6 +389,14 @@ export const kernelApi = {
     },
 
     listModels: async (): Promise<string[]> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'list' }), 'manage_model'
+                );
+                if (response?.success && response?.data) return response.data.models || [];
+            } catch (e) { /* fall through */ }
+        }
         const response = await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'list' }),
             messageType: 'manage_model'
@@ -389,6 +405,14 @@ export const kernelApi = {
     },
 
     setModel: async (model: string): Promise<boolean> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'set', model }), 'manage_model'
+                );
+                return response?.success ?? false;
+            } catch (e) { /* fall through */ }
+        }
         const response = await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'set', model }),
             messageType: 'manage_model'
@@ -582,6 +606,14 @@ export const systemApi = {
     getSystemInfo: async (): Promise<SystemInfo> => (await getInvoke())('get_system_info'),
 
     getStats: async (): Promise<any> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({}), 'system_stats'
+                );
+                return response || { success: true, data: {} };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({}),
             messageType: 'system_stats'
@@ -589,6 +621,14 @@ export const systemApi = {
     },
 
     updateConfig: async (config: Record<string, any>): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ config }), 'update_config'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ config }),
             messageType: 'update_config'
@@ -631,42 +671,123 @@ export const fsApi = {
 
 // Security API (Self-Destruct)
 export const securityModApi = {
-    getStatus: async (): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'destruct_status' }), messageType: 'security' }),
+    getStatus: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'destruct_status' }), 'security'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'destruct_status' }), messageType: 'security' });
+    },
 
-    initiate: async (level: string, pin: string, voicePrint?: string): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'initiate_destruct', data: { level, pin, voice_print: voicePrint } }), messageType: 'security' }),
+    initiate: async (level: string, pin: string, voicePrint?: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'initiate_destruct', data: { level, pin, voice_print: voicePrint } }), 'security'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'initiate_destruct', data: { level, pin, voice_print: voicePrint } }), messageType: 'security' });
+    },
 
-    cancel: async (pin: string): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'cancel_destruct', data: { pin } }), messageType: 'security' }),
+    cancel: async (pin: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'cancel_destruct', data: { pin } }), 'security'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'cancel_destruct', data: { pin } }), messageType: 'security' });
+    },
 };
 
 // Firewall API
 export const firewallApi = {
-    getRules: async (): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'list_rules' }), messageType: 'firewall' }),
+    getRules: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'list_rules' }), 'firewall'
+                );
+                return response || { success: true, data: { rules: [] } };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'list_rules' }), messageType: 'firewall' });
+    },
 
-    addRule: async (pattern: string, action: string, agentId?: string, description?: string): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', {
+    addRule: async (pattern: string, action: string, agentId?: string, description?: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'add_rule', data: { pattern, action, agent_id: agentId, description } }), 'firewall'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', {
             message: JSON.stringify({ action: 'add_rule', data: { pattern, action, agent_id: agentId, description } }),
             messageType: 'firewall'
-        }),
+        });
+    },
 
-    deleteRule: async (id: string): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'delete_rule', data: { id } }), messageType: 'firewall' }),
+    deleteRule: async (id: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'delete_rule', data: { id } }), 'firewall'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'delete_rule', data: { id } }), messageType: 'firewall' });
+    },
 
-    getLogs: async (limit: number = 50): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'logs', data: { limit } }), messageType: 'firewall' }),
+    getLogs: async (limit: number = 50): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'logs', data: { limit } }), 'firewall'
+                );
+                return response || { success: true, data: { logs: [] } };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'logs', data: { limit } }), messageType: 'firewall' });
+    },
 };
 
 // Intent API
 export const intentApi = {
-    dispatch: async (text: string, source: string = 'text'): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ text, source }), messageType: 'intent' }),
+    dispatch: async (text: string, source: string = 'text'): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ text, source }), 'intent'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ text, source }), messageType: 'intent' });
+    },
 
     // Full NLU pipeline: IntentParser → IntentDispatcher
-    dispatchNLU: async (text: string): Promise<KernelResponse> =>
-        (await getInvoke())('send_to_kernel', { message: JSON.stringify({ text }), messageType: 'intent_dispatch' }),
+    dispatchNLU: async (text: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ text }), 'intent_dispatch'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ text }), messageType: 'intent_dispatch' });
+    },
 };
 
 // Cron API (Kernel Scheduler via event bridge)
@@ -722,6 +843,15 @@ export const cronApi = {
 
 export const browserApi = {
     navigate: async (url: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'navigate', url }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'navigate', url }),
             messageType: 'browser'
@@ -729,6 +859,15 @@ export const browserApi = {
     },
 
     click: async (selector?: string, x?: number, y?: number): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'click', selector, x, y }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'click', selector, x, y }),
             messageType: 'browser'
@@ -736,6 +875,15 @@ export const browserApi = {
     },
 
     type: async (text: string, selector?: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'type', text, selector }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'type', text, selector }),
             messageType: 'browser'
@@ -743,6 +891,15 @@ export const browserApi = {
     },
 
     scroll: async (direction: 'up' | 'down', amount: number = 500): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'scroll', direction, amount }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'scroll', direction, amount }),
             messageType: 'browser'
@@ -750,6 +907,15 @@ export const browserApi = {
     },
 
     goBack: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'go_back' }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'go_back' }),
             messageType: 'browser'
@@ -757,6 +923,15 @@ export const browserApi = {
     },
 
     goForward: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'go_forward' }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'go_forward' }),
             messageType: 'browser'
@@ -764,6 +939,15 @@ export const browserApi = {
     },
 
     reload: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'reload' }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'reload' }),
             messageType: 'browser'
@@ -771,6 +955,15 @@ export const browserApi = {
     },
 
     getState: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'get_state' }),
+                    'browser'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'get_state' }),
             messageType: 'browser'
@@ -780,6 +973,15 @@ export const browserApi = {
 
 export const messagingApi = {
     listChannels: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'list_channels' }),
+                    'messaging'
+                );
+                return response || { success: true, data: { channels: [], stats: { total_messages: 0, active_channels: 0 } } };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'list_channels' }),
             messageType: 'messaging'
@@ -787,6 +989,15 @@ export const messagingApi = {
     },
 
     send: async (channel: string, recipient: string, text: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'send', channel, recipient, text }),
+                    'messaging'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'send', channel, recipient, text }),
             messageType: 'messaging'
@@ -794,6 +1005,15 @@ export const messagingApi = {
     },
 
     broadcast: async (text: string): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'broadcast', text }),
+                    'messaging'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'broadcast', text }),
             messageType: 'messaging'
@@ -801,6 +1021,15 @@ export const messagingApi = {
     },
 
     getHistory: async (channel?: string, limit: number = 50): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'history', channel, limit }),
+                    'messaging'
+                );
+                return response || { success: true, data: { messages: [] } };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'history', channel, limit }),
             messageType: 'messaging'
@@ -808,6 +1037,15 @@ export const messagingApi = {
     },
 
     toggleChannel: async (channel: string, enable: boolean): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({ action: 'toggle_channel', channel, enable }),
+                    'messaging'
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
         return await (await getInvoke())<KernelResponse>('send_to_kernel', {
             message: JSON.stringify({ action: 'toggle_channel', channel, enable }),
             messageType: 'messaging'

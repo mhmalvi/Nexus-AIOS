@@ -667,6 +667,9 @@ class AetherKernel:
             elif message.message_type == "agent_registry":
                 return await self._handle_agent_registry(message)
 
+            elif message.message_type == "manage_memory":
+                return await self._handle_manage_memory(message)
+
             else:
                 return KernelResponse(
                     id=message.id,
@@ -2070,6 +2073,36 @@ class AetherKernel:
                 error=f"Memory query failed: {e}"
             )
             
+    async def _handle_manage_memory(self, message: KernelMessage) -> KernelResponse:
+        """Handle memory management operations (clear tier, delete entry)"""
+        action = message.payload.get("action", "")
+        tier = message.payload.get("tier", "")
+
+        if action == "clear" and tier:
+            try:
+                cleared_count = await self.memory.clear_tier(tier)
+                print(f"🗑️ Cleared {cleared_count} entries from tier: {tier}", file=sys.stderr)
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="memory_cleared",
+                    data={"tier": tier, "cleared_count": cleared_count}
+                )
+            except Exception as e:
+                return KernelResponse(
+                    id=message.id,
+                    success=False,
+                    message_type="error",
+                    error=f"Failed to clear memory tier '{tier}': {e}"
+                )
+
+        return KernelResponse(
+            id=message.id,
+            success=False,
+            message_type="error",
+            error=f"Unknown manage_memory action: {action}"
+        )
+
     # NOTE: _handle_manage_model is defined above (lines ~1720-1786) — single canonical version
 
     async def _background_pull_model(self, model: str):

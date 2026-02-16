@@ -24,6 +24,7 @@ import { MessagingDashboard } from "../tools/MessagingDashboard";
 import { PluginManager } from "../tools/PluginManager";
 import { LockScreen } from "../system/LockScreen";
 import { NotificationCenter } from "./NotificationCenter";
+import { ToastContainer } from "./ToastContainer";
 import { SummaryOverlay } from "./SummaryOverlay";
 import { ContextMenu } from "../ui/ContextMenu";
 import { WindowFrame } from "../system/WindowFrame";
@@ -149,6 +150,7 @@ export function MainLayout() {
 
             <LockScreen />
             <CommandPalette />
+            <ToastContainer />
             <NotificationCenter isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
             <SummaryOverlay isOpen={isSummaryOpen} onClose={() => setIsSummaryOpen(false)} activeWindowId={activeWindowId} />
 
