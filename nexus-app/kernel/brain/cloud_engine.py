@@ -128,7 +128,7 @@ PROVIDER_REGISTRY: Dict[ProviderID, ProviderSpec] = {
         auth_header="",  # Ollama needs no auth
         auth_prefix="",
         default_model="llama3.2:3b",
-        timeout_seconds=5,  # fast fail for local inference check
+        timeout_seconds=180,  # real generation + cold-load headroom (was 5s, which timed out any answer >5s)
     ),
 }
 
@@ -333,7 +333,7 @@ class CloudLLMEngine:
                 continue
 
             cooldown = self._cooldowns.get(provider_id)
-            if cooldown and cooldown.is_in_cooldown():
+            if cooldown and cooldown.is_in_cooldown() and provider_id != ProviderID.OLLAMA.value:
                 logger.debug(
                     "Skipping %s (cooldown %.0fs)",
                     provider_id, cooldown.remaining_seconds,
@@ -452,7 +452,10 @@ class CloudLLMEngine:
             # Skip cloud providers with no API key
             if pid != ProviderID.OLLAMA and not self.api_keys.get(pid_str, "").strip():
                 return
-            model = self.provider_models.get(pid_str, spec.default_model)
+            # Use `or` (not get's default) so an empty-string override ("") in
+            # config falls back to the provider's default model instead of
+            # sending an empty model name (Ollama rejects "" with HTTP 400).
+            model = self.provider_models.get(pid_str) or spec.default_model
             candidates.append((pid_str, model))
             seen.add(pid_str)
 
@@ -557,7 +560,10 @@ class CloudLLMEngine:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url, headers=headers, json=payload,
-                timeout=aiohttp.ClientTimeout(total=spec.timeout_seconds),
+                # Streaming: bound the idle gap BETWEEN chunks (sock_read), not the
+                # total generation time — a `total` cap kills long answers mid-stream.
+                # total=None lets a steadily-progressing response run to completion.
+                timeout=aiohttp.ClientTimeout(total=None, sock_connect=15, sock_read=spec.timeout_seconds),
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()
@@ -597,6 +603,7 @@ class CloudLLMEngine:
                 "model": model,
                 "messages": messages,
                 "stream": stream,
+                "keep_alive": "30m",  # keep model resident to avoid repeated cold loads
                 "options": {
                     "temperature": temperature,
                     "num_predict": max_tokens,
@@ -745,7 +752,7 @@ class CloudLLMEngine:
                 continue
 
             cooldown = self._cooldowns.get(provider_id)
-            if cooldown and cooldown.is_in_cooldown():
+            if cooldown and cooldown.is_in_cooldown() and provider_id != ProviderID.OLLAMA.value:
                 logger.debug(
                     "Skipping %s (cooldown %.0fs)",
                     provider_id, cooldown.remaining_seconds,

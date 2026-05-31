@@ -112,7 +112,7 @@ class ManagerAgent:
             async def _execute_single_step(step):
                 self._emit_tao("ACTION", f"Executing tool: {step.tool}", step.id,
                                details={"tool": step.tool, "args": step.args})
-                return await self._dispatch_step(step, description)
+                return await self._dispatch_step(step, description, auto_approve)
 
             if len(ready) == 1:
                 step = ready[0]
@@ -140,7 +140,7 @@ class ManagerAgent:
                 if not result.success:
                     if hasattr(result, 'needs_retry') and result.needs_retry and retry_count < self.max_retries:
                         retry_count += 1
-                        corrected = await self._retry_with_correction(step, result.correction, description)
+                        corrected = await self._retry_with_correction(step, result.correction, description, auto_approve)
                         results.append(corrected)
                         results_by_id[step.id] = corrected
                         if not corrected.success:
@@ -163,7 +163,7 @@ class ManagerAgent:
 
         return task_result
 
-    async def _dispatch_step(self, step, description: str) -> StepResult:
+    async def _dispatch_step(self, step, description: str, auto_approve: bool = False) -> StepResult:
         """Dispatch a single step to the appropriate agent or worker."""
         if step.tool == "security_audit" and self.security_auditor:
             try:
@@ -207,19 +207,20 @@ class ManagerAgent:
         else:
             return await self.worker.execute_step(
                 step={"id": step.id, "tool": step.tool, "action": step.action, "args": step.args},
-                context=description
+                context=description,
+                auto_approve=auto_approve
             )
     
-    async def _retry_with_correction(self, step, correction: str, context: str):
+    async def _retry_with_correction(self, step, correction: str, context: str, auto_approve: bool = False):
         """Retry a step with correction applied"""
-        
+
         # Use LLM to apply correction
         prompt = f"Original: {step.action} Correction: {correction}. Generate corrected action."
-        
+
         try:
             corrected_action = await self.brain.generate(prompt=prompt, temperature=0.2, max_tokens=100)
             corrected_step = {"id": f"{step.id}_retry", "tool": step.tool, "action": corrected_action, "args": step.args}
-            return await self.worker.execute_step(corrected_step, context)
+            return await self.worker.execute_step(corrected_step, context, auto_approve=auto_approve)
         except Exception as e:
             from .worker_agent import StepResult
             return StepResult(step_id=f"{step.id}_retry", success=False, output=None, error=str(e))

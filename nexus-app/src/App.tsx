@@ -197,25 +197,13 @@ function App() {
         }
       });
     }
-  }, [booted, addNotification]);
+  }, [booted]); // run once when booted flips true — addNotification identity is unstable and must NOT be a dep (caused an infinite start_kernel loop)
 
-  // Kernel health monitoring — poll every 10s
-  useEffect(() => {
-    if (!booted) return;
-    let active = true;
-    const checkHealth = async () => {
-      try {
-        const { kernelApi } = await import('./services/tauriApi');
-        const status = await kernelApi.getStatus();
-        if (active && status.status === 'error') {
-          addNotification({ title: 'Kernel Error', message: 'Kernel reported an error state. Attempting restart...', type: 'error' });
-          await kernelApi.start();
-        }
-      } catch { /* ignore in browser mode */ }
-    };
-    const interval = setInterval(checkHealth, 10000);
-    return () => { active = false; clearInterval(interval); };
-  }, [booted, addNotification]);
+  // NOTE: Kernel crash recovery is handled conservatively by StatusBar, which
+  // restarts ONCE only when the kernel is actually reported stopped/error.
+  // A previous aggressive ping-based monitor lived here but caused false-positive
+  // "Reconnecting / Restored" flapping (a busy kernel missing an 8s ping looked
+  // like a crash), so it was removed. Do NOT reintroduce restart-on-ping-latency.
 
   // Listen for global shortcut (Alt+Space) from Tauri backend
   const { isGhostBarOpen, setGhostBarOpen } = useStore();

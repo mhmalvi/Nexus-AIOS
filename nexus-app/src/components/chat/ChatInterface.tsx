@@ -4,10 +4,38 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "../../context/StoreContext";
 import { aiService } from "../../services/aiService";
 import { ActionRequest, Conversation } from "../../types";
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { Components } from 'react-markdown';
 import { Plus, MessageSquare, Trash2, Copy, RefreshCw, Check, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, X, Mic, MicOff } from 'lucide-react';
 import { ChannelExplorer } from './ChannelExplorer';
 import { mockTauri } from '../../services/mockTauri';
+
+// Rich, readable Markdown styling for assistant replies (headings, lists,
+// code blocks, inline code, links, quotes, tables, rules).
+const markdownComponents: Components = {
+    h1: ({ children }) => <h1 className="text-lg font-bold text-foreground mt-4 mb-2 first:mt-0">{children}</h1>,
+    h2: ({ children }) => <h2 className="text-base font-bold text-foreground mt-4 mb-2 first:mt-0">{children}</h2>,
+    h3: ({ children }) => <h3 className="text-sm font-semibold text-foreground/90 uppercase tracking-wide mt-3 mb-1.5 first:mt-0">{children}</h3>,
+    p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
+    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+    em: ({ children }) => <em className="italic text-foreground/80">{children}</em>,
+    a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2 hover:text-accent/80">{children}</a>,
+    ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1 marker:text-primary/50">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1 marker:text-primary/50">{children}</ol>,
+    li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+    blockquote: ({ children }) => <blockquote className="border-l-2 border-primary/40 pl-3 my-3 italic text-foreground/70">{children}</blockquote>,
+    hr: () => <hr className="border-border/40 my-4" />,
+    pre: ({ children }) => <pre className="bg-black/40 border border-border/50 rounded-lg p-3 my-3 overflow-x-auto text-[13px] font-mono leading-relaxed">{children}</pre>,
+    code: ({ className, children }) => {
+        const text = String(children ?? '');
+        const isBlock = (className || '').includes('language-') || text.includes('\n');
+        return isBlock
+            ? <code className="font-mono text-[13px] text-foreground/90">{children}</code>
+            : <code className="bg-primary/10 text-accent px-1.5 py-0.5 rounded text-[0.85em] font-mono">{children}</code>;
+    },
+    table: ({ children }) => <div className="overflow-x-auto my-3"><table className="w-full text-sm border-collapse">{children}</table></div>,
+    th: ({ children }) => <th className="text-left font-semibold px-2 py-1.5 border-b border-border/60">{children}</th>,
+    td: ({ children }) => <td className="px-2 py-1.5 border-b border-border/30">{children}</td>,
+};
 
 export function ChatInterface() {
     const {
@@ -306,10 +334,10 @@ export function ChatInterface() {
                                         key={msg.id}
                                         initial={{ opacity: 0, y: 5, scale: 0.98, filter: 'blur(5px)' }}
                                         animate={{
-                                            opacity: isOld ? 0.3 : 1,
+                                            opacity: isOld ? 0.6 : 1,
                                             y: 0,
-                                            filter: isOld ? 'blur(2px)' : 'blur(0px)',
-                                            scale: isOld ? 0.98 : 1
+                                            filter: 'blur(0px)',
+                                            scale: 1
                                         }}
                                         transition={{ duration: 0.8, ease: "easeOut" }}
                                         className={`group flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} ${msg.role === 'openclaw' ? 'border-l-2 border-cyan-500/30 pl-4' : ''}`}
@@ -318,11 +346,11 @@ export function ChatInterface() {
                                             {msg.role === 'user' ? 'Architect' : msg.role === 'openclaw' ? `OpenClaw \u00B7 ${msg.metadata?.sender || msg.metadata?.channel || ''}` : 'Echoes'}
                                         </span>
 
-                                        <div className={`relative max-w-[90%] text-lg md:text-xl font-light leading-relaxed ${msg.role === 'user'
-                                            ? 'text-right text-foreground'
+                                        <div className={`relative max-w-[90%] ${msg.role === 'user'
+                                            ? 'text-right text-lg md:text-xl font-light leading-relaxed text-foreground'
                                             : msg.role === 'openclaw'
-                                                ? 'text-left text-cyan-400/90'
-                                                : 'text-left text-primary/90 text-glow'
+                                                ? 'text-left text-lg font-light leading-relaxed text-cyan-400/90'
+                                                : 'text-left w-full'
                                             }`}>
                                             {msg.role === 'openclaw' ? (
                                                 <div className="flex items-start gap-2">
@@ -331,18 +359,18 @@ export function ChatInterface() {
                                                 </div>
                                             ) : msg.role === 'user' ? (
                                                 msg.content
+                                            ) : msg.content === '...' ? (
+                                                <div className="flex gap-1.5 py-2 pl-1" aria-label="Thinking">
+                                                    <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                    <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                    <span className="w-2 h-2 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '300ms' }} />
+                                                </div>
                                             ) : (
-                                                <ReactMarkdown
-                                                    components={{
-                                                        p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
-                                                        strong: ({ children }) => <strong className="font-semibold text-white text-shadow-sm">{children}</strong>,
-                                                        code: ({ children }) => <code className="bg-black/30 px-1 py-0.5 rounded text-sm font-mono text-accent">{children}</code>,
-                                                        ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
-                                                        li: ({ children }) => <li className="opacity-90">{children}</li>,
-                                                    }}
-                                                >
-                                                    {msg.content}
-                                                </ReactMarkdown>
+                                                <div className="rounded-2xl bg-card/50 border border-border/40 backdrop-blur-sm px-4 py-3 text-[15px] leading-relaxed text-foreground/90 shadow-lg shadow-black/5">
+                                                    <ReactMarkdown components={markdownComponents}>
+                                                        {msg.content}
+                                                    </ReactMarkdown>
+                                                </div>
                                             )}
                                         </div>
 

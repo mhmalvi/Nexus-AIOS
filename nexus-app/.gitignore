@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python kernel
+kernel/venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local runtime / user data (never commit)
+.aether/
+src-tauri/data/
+src-tauri/target/
+
+# Build/check artifacts & test output
+src-tauri/check_*.txt
+playwright-report/
+test-results/

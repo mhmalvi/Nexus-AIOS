@@ -92,8 +92,38 @@ export class AIService {
   }
 
   async summarize(context: any): Promise<string> {
-    // TODO: Implement backend summarization endpoint
-    return "Kernel Context: Active";
+    // Local, deterministic summary of the current session context. This avoids
+    // showing a fake placeholder; a kernel-backed LLM summary can replace it
+    // later via a dedicated request/response message type.
+    try {
+      const history: any[] = Array.isArray(context?.history) ? context.history : [];
+      const thoughts: any[] = Array.isArray(context?.thoughts) ? context.thoughts : [];
+      const windowId: string = context?.window || "SYSTEM";
+
+      if (history.length === 0 && thoughts.length === 0) {
+        return `No recent activity to summarize for ${windowId}.`;
+      }
+
+      const clip = (s: string, n = 160): string => {
+        const t = (s || "").replace(/\s+/g, " ").trim();
+        return t.length > n ? t.slice(0, n) + "…" : t;
+      };
+      const lastUser = [...history].reverse().find((m) => m?.role === "user");
+      const lastAssistant = [...history].reverse().find((m) => m?.role === "assistant");
+
+      const lines: string[] = [];
+      lines.push(`Context for ${windowId}: ${history.length} recent message(s), ${thoughts.length} agent thought(s).`);
+      if (lastUser?.content) lines.push(`Last request: "${clip(lastUser.content)}"`);
+      if (lastAssistant?.content) lines.push(`Last response: "${clip(lastAssistant.content)}"`);
+      if (thoughts.length > 0) {
+        const t = thoughts[0];
+        const tc = typeof t === "string" ? t : (t?.content ?? t?.message ?? "");
+        if (tc) lines.push(`Latest thought: "${clip(tc)}"`);
+      }
+      return lines.join("\n");
+    } catch {
+      return "Unable to build summary from current context.";
+    }
   }
 }
 

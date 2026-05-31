@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Activity, Cpu, HardDrive, Brain, GitBranch, Wifi, Clock } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 import { kernelApi, systemApi } from "../../services/tauriApi";
+import { useModelConfig, modelConfig, effectiveModel, providerLabel } from "../../services/modelConfig";
 import { mockTauri } from "../../services/mockTauri";
 import { STATUS_BAR_HEIGHT } from "../../services/WindowBounds";
 
@@ -56,7 +57,7 @@ export function StatusBar() {
     const [telemetry, setTelemetry] = useState<SystemTelemetry>(getDefaultTelemetry);
     const [kernelStatus, setKernelStatus] = useState<'stopped' | 'starting' | 'running' | 'error'>('stopped');
     const [kernelPid, setKernelPid] = useState<number | null>(null);
-    const [modelInfo, setModelInfo] = useState({ name: 'gemini-2.5-pro', type: 'Multi' });
+    const mc = useModelConfig();
     const [openClawConnected, setOpenClawConnected] = useState(false);
     const [voiceActive, setVoiceActive] = useState(false);
     const [npuActive, setNpuActive] = useState(false);
@@ -112,13 +113,9 @@ export function StatusBar() {
                     // Request system stats from kernel
                     await systemApi.getStats();
 
-                    // Model info
-                    try {
-                        const mStats = await kernelApi.getModelStats();
-                        if (mStats?.default_model) {
-                            setModelInfo({ name: mStats.default_model.split(':')[0], type: mStats.llm_routing_enabled ? 'Multi' : 'Single' });
-                        }
-                    } catch (_) { }
+                    // Keep the global model config fresh so the bottom-bar model
+                    // (and every other surface) reflects the latest selection.
+                    modelConfig.refresh();
                 }
             } catch (_) { }
 
@@ -230,7 +227,8 @@ export function StatusBar() {
             <div className="flex items-center gap-3">
                 <div className="hidden md:flex items-center gap-1 cursor-pointer hover:text-foreground/60 transition-colors" onClick={() => openWindow('settings')}>
                     <Brain className="w-3 h-3 opacity-50" />
-                    <span>{modelInfo.name}</span>
+                    <span>{effectiveModel(mc).split(':')[0] || '—'}</span>
+                    <span className="text-muted-foreground/40">{providerLabel(mc.aiProvider)}</span>
                 </div>
 
                 <div className="w-px h-2.5 bg-border" />

@@ -635,6 +635,21 @@ export const systemApi = {
         });
     },
 
+    getConfig: async (): Promise<KernelResponse> => {
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(
+                    JSON.stringify({}), 'get_config', 10000
+                );
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return await (await getInvoke())<KernelResponse>('send_to_kernel', {
+            message: JSON.stringify({}),
+            messageType: 'get_config'
+        });
+    },
+
     getPlatformInfo: async (): Promise<{ platform: string; version: string }> => (await getInvoke())('get_platform_info'),
 };
 

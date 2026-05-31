@@ -26,9 +26,11 @@ except ImportError:
 # Default configuration values
 DEFAULT_CONFIG: Dict[str, Any] = {
     # ── AI Provider Settings ──────────────────────────────────────────
-    # "auto" = try cloud providers first (if keys exist), fallback to Ollama
-    # Set to a specific provider ID to prefer it: "groq", "cerebras", etc.
-    "ai_provider": "auto",
+    # Local-first by default: prefer the local Ollama runtime for privacy.
+    # Set to a specific cloud provider ID ("openai", "groq", ...) to prefer it
+    # once its API key is configured. "auto" = try cloud first (if keys exist),
+    # then fall back to Ollama.
+    "ai_provider": "ollama",
 
     # Cloud Provider API Keys (user-provided, never shipped with defaults)
     "api_keys": {
@@ -62,7 +64,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "max_tokens": 2048,
 
     # ── Model Router ──────────────────────────────────────────────────
-    "enable_llm_routing": True,
+    # Per-query model routing swaps the active Ollama model based on intent,
+    # which forces a model reload and adds latency. Off by default (pin one
+    # model); set True to trade latency for per-query model specialization.
+    "enable_llm_routing": False,
     "routing_model": "llama3.2:1b",
 
     # ── Safety & Supervisor ───────────────────────────────────────────

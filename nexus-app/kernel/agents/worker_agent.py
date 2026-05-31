@@ -26,19 +26,27 @@ class WorkerAgent:
         self.supervisor = supervisor
         self.error_kb = ErrorKnowledgeBase()
     
-    async def execute_step(self, step: Dict[str, Any], context: Optional[str] = None) -> StepResult:
+    async def execute_step(self, step: Dict[str, Any], context: Optional[str] = None, auto_approve: bool = False) -> StepResult:
         step_id = step.get("id", "unknown")
         tool = step.get("tool", "")
         action = step.get("action", "")
         args = step.get("args", {})
-        
+
         validation = self.supervisor.validate(action=f"{tool}: {action}", context=context)
-        
+
         if not validation.is_safe:
             return StepResult(step_id=step_id, success=False, output=None, error=f"Blocked: {validation.reason}")
-        
-        if validation.requires_approval:
-            return StepResult(step_id=step_id, success=False, output=None, error="Requires approval", needs_retry=True)
+
+        if validation.requires_approval and not auto_approve:
+            # Fail CLOSED. An action the supervisor flags as requiring approval is
+            # NOT silently reworded and retried (which could bypass the verdict),
+            # and is NOT executed unless the task was explicitly launched with
+            # auto_approve=True. This keeps a human in the loop by default.
+            return StepResult(
+                step_id=step_id, success=False, output=None,
+                error="Blocked: action requires human approval (auto_approve is disabled)",
+                needs_retry=False
+            )
         
         try:
             result = await self.toolbox.execute(tool_name=tool, kwargs=args)

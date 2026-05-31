@@ -636,6 +636,10 @@ class AetherKernel:
             elif message.message_type == "update_config":
                 # Update runtime configuration
                 return await self._handle_update_config(message)
+
+            elif message.message_type == "get_config":
+                # Return a safe (redacted) view of runtime config
+                return await self._handle_get_config(message)
             
             elif message.message_type == "security":
                 return await self._handle_security(message)
@@ -820,22 +824,17 @@ class AetherKernel:
         category = message.payload.get("category")
         
         # === AUTO-REPLY RECOGNITION (GAP 9) ===
+        # Command *execution* is not yet implemented (there is no handler
+        # registry). Rather than dead-ending a recognized command with a
+        # "pending implementation" stub, we log the detection and fall through
+        # to normal AI handling so the user always gets a useful response.
         if self.auto_reply:
-            cmd = self.auto_reply.dispatch_command(query)
-            if cmd:
-                print(f"🤖 Auto-Reply Command Detected: {cmd.name}", file=sys.stderr)
-                # For now, just acknowledge. Future: execute _cmd_ methods.
-                return KernelResponse(
-                    id=message.id,
-                    success=True,
-                    message_type="response",
-                    data={
-                        "response": f"**Command Recognized:** `/{cmd.name}`\n*{cmd.description}*\n\n(Command execution pending implementation in handler registry)",
-                        "context_used": 0,
-                        "model": "system",
-                        "routing_category": "command"
-                    }
-                )
+            try:
+                cmd = self.auto_reply.dispatch_command(query)
+                if cmd:
+                    print(f"🤖 Auto-Reply command detected ({cmd.name}); executor not implemented — handling as a normal query.", file=sys.stderr)
+            except Exception as e:
+                print(f"⚠️ Auto-Reply detection error (non-critical): {e}", file=sys.stderr)
 
         # === QUERY CACHE CHECK ===
         cache_key = self.query_cache.make_key(query, self.brain.model)
@@ -859,7 +858,10 @@ class AetherKernel:
         routing = self.memory.context_scheduler.route_intent(query)
         print(f"🔄 Routing: {query[:30]}... -> {routing.category.value} ({routing.model})", file=sys.stderr)
         
-        if self.config.get("model_routing_enabled", True):
+        # Model routing can swap the active Ollama model per-query, which forces
+        # a model reload (multi-second latency / "thrash"). Pinned by default —
+        # enable per-query routing via the "enable_llm_routing" config key.
+        if self.config.get("enable_llm_routing", False):
              current_model = self.brain.model
              if current_model != routing.model:
                  print(f"🔀 Switching model: {current_model} -> {routing.model}", file=sys.stderr)
@@ -1104,8 +1106,11 @@ class AetherKernel:
             except ValueError:
                 return KernelResponse(id=message.id, success=False, error=f"Invalid destruct level: {level_str}")
                 
-            # TODO: Add real voice print verification here
-            voice_verified = bool(voice_print) 
+            # SECURITY: Real voice-print verification is NOT implemented. Until it
+            # is, never treat a supplied value as "verified" — fail closed so a
+            # destructive level that requires voice confirmation cannot be
+            # triggered by simply passing any non-empty string.
+            voice_verified = False
             
             result = await self.self_destruct.execute(level, pin, voice_verified=voice_verified)
             return KernelResponse(
@@ -1346,7 +1351,7 @@ class AetherKernel:
             )
             
         except Exception as e:
-            logger.error(f"Browser action failed: {e}")
+            print(f"❌ Browser action failed: {e}", file=sys.stderr)
             return KernelResponse(
                 id=message.id,
                 success=False,
@@ -1524,17 +1529,17 @@ class AetherKernel:
             
         # Update config
         for key, value in config_updates.items():
-            # Special handling for api_keys: MERGE, don't overwrite
-            if key == "api_keys" and isinstance(value, dict):
-                current_keys = self.config.get("api_keys", {})
-                if isinstance(current_keys, dict):
-                    current_keys.update(value)
-                    self.config["api_keys"] = current_keys
+            # MERGE dict-valued settings (api_keys, provider_models) so a partial
+            # update doesn't wipe existing entries; replace everything else.
+            if key in ("api_keys", "provider_models") and isinstance(value, dict):
+                current = self.config.get(key, {})
+                if isinstance(current, dict):
+                    current.update(value)
+                    self.config[key] = current
                 else:
-                    self.config["api_keys"] = value
-                
+                    self.config[key] = value
                 if hasattr(self, 'runtime_config'):
-                    await self.runtime_config.set("api_keys", self.config["api_keys"])
+                    await self.runtime_config.set(key, self.config[key])
             else:
                 self.config[key] = value
                 # Persist if supported
@@ -1544,12 +1549,47 @@ class AetherKernel:
         # Apply specific updates
         if "voice_enabled" in config_updates:
             self._voice_enabled = config_updates["voice_enabled"]
-            
+
+        # Propagate to the Brain so new API keys / provider / model take effect
+        # immediately (no kernel restart). The brain's engine holds its own
+        # config copy, so sync it before reloading.
+        try:
+            if self.brain and getattr(self.brain, "llm", None):
+                if isinstance(getattr(self.brain.llm, "_config", None), dict):
+                    self.brain.llm._config.update(self.config)
+                await self.brain.reload_config()
+                print("🔁 Brain reloaded with updated config", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️ Brain reload after config update failed: {e}", file=sys.stderr)
+
+        # Redact API keys before returning (never echo secrets to the frontend)
+        safe_config = {k: v for k, v in self.config.items() if k != "api_keys"}
+        safe_config["providers_with_keys"] = sorted(
+            p for p, v in (self.config.get("api_keys", {}) or {}).items() if v
+        )
         return KernelResponse(
-            id=message.id, 
-            success=True, 
-            message_type="config_updated", 
-            data={"config": self.config}
+            id=message.id,
+            success=True,
+            message_type="config_updated",
+            data={"config": safe_config}
+        )
+
+    async def _handle_get_config(self, message: KernelMessage) -> KernelResponse:
+        """Return a safe view of the runtime config — no raw API keys, only
+        which providers have a key configured."""
+        api_keys = self.config.get("api_keys", {}) or {}
+        return KernelResponse(
+            id=message.id,
+            success=True,
+            message_type="config",
+            data={
+                "ai_provider": self.config.get("ai_provider", "ollama"),
+                "default_model": self.config.get("default_model", "llama3.2:3b"),
+                "ollama_host": self.config.get("ollama_host", "http://localhost:11434"),
+                "provider_models": self.config.get("provider_models", {}),
+                "providers_with_keys": sorted(p for p, v in api_keys.items() if v),
+                "enable_llm_routing": self.config.get("enable_llm_routing", False),
+            }
         )
 
     async def _handle_voice(self, message: KernelMessage) -> KernelResponse:
@@ -2646,10 +2686,38 @@ User context: Administrator access granted.
         except Exception as e:
             print(f"⚠️ OpenClaw handler error: {e}", file=sys.stderr)
 
+    async def _dispatch_message(self, message: KernelMessage):
+        """Process a single message and write its response.
+
+        Runs as an independent asyncio task so a long-running operation
+        (agent task, document indexing, browser automation) does NOT block
+        the stdin read loop from handling subsequent messages such as chat,
+        status checks, or approvals.
+        """
+        try:
+            response = await self.process_message(message)
+            print(json.dumps({
+                "id": response.id,
+                "success": response.success,
+                "message_type": response.message_type,
+                "data": response.data,
+                "error": response.error
+            }), flush=True)
+        except Exception as e:
+            print(json.dumps({
+                "id": getattr(message, "id", "error"),
+                "success": False,
+                "message_type": "error",
+                "error": str(e)
+            }), flush=True)
+
     async def run(self):
         """Main run loop - reads from stdin, writes to stdout"""
         self.running = True
         self.loop = asyncio.get_running_loop()
+        # Track in-flight dispatch tasks so they are not garbage-collected
+        # mid-execution while the loop continues reading new messages.
+        self._inflight_tasks = set()
         
         # Emit startup status
         self._emit_status("starting", "Kernel initializing...")
@@ -2760,18 +2828,14 @@ User context: Administrator access granted.
                     }), flush=True)
                     continue
                 
-                # Process and respond
-                response = await self.process_message(message)
-                
-                # Write response to stdout (received by Rust orchestrator)
-                print(json.dumps({
-                    "id": response.id,
-                    "success": response.success,
-                    "message_type": response.message_type,
-                    "data": response.data,
-                    "error": response.error
-                }), flush=True)
-                
+                # Dispatch as an independent task so a long-running operation
+                # (agent task, document indexing, browser automation) does not
+                # block the loop from reading and handling subsequent messages
+                # (chat, status, approvals). The response is written by the task.
+                task = asyncio.create_task(self._dispatch_message(message))
+                self._inflight_tasks.add(task)
+                task.add_done_callback(self._inflight_tasks.discard)
+
             except Exception as e:
                 print(json.dumps({
                     "id": "error",

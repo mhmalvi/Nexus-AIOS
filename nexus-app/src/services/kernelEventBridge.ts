@@ -102,6 +102,7 @@ class KernelEventBridge {
       'model_stats': ['model_stats_result', 'model_stats'],
       'index_document': ['index_result', 'index_batch_result', 'indexed_documents', 'index_deleted'],
       'update_config': ['config_updated'],
+      'get_config': ['config'],
       'deep_memory': ['deep_memory_result'],
       'voice': ['transcription', 'voice_error', 'tts_complete', 'voice_status'],
       'voice_config': ['voice_config_result'],
@@ -133,6 +134,7 @@ class KernelEventBridge {
     'security': 10000,
     'system_stats': 10000,
     'update_config': 10000,
+    'get_config': 10000,
     'plugin': 10000,
   };
 
