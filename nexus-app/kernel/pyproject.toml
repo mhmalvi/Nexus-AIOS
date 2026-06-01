@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aether-cli"
+version = "0.1.0"
+description = "AETHER — Autonomous AI Operating System CLI (agentic REPL for the Nexus kernel)"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Nexus / Aether" }]
+
+# Core runtime deps needed for chat + the agentic executor (shell/file/web tools).
+# The CLI degrades gracefully when optional subsystems (voice, lancedb memory,
+# NPU, etc.) are missing, so heavy deps live in requirements.txt rather than here.
+# For the full feature set:  pip install -r requirements.txt
+dependencies = [
+  "aiohttp",
+  "pydantic",
+  "rich>=13.0",
+  "readchar>=4.0",
+  "prompt_toolkit>=3.0",
+]
+
+[project.scripts]
+# Installs a global `aether` command. Recommended dev install:
+#     pip install -e .        (editable — keeps this tree as the import root)
+#     pipx install -e .       (isolated global command)
+aether = "aether_cli:main"
+
+[tool.setuptools]
+# aether_cli is a top-level single-file module; the kernel subsystems below are
+# discovered as packages. main() also inserts this directory on sys.path so the
+# command works from a PyInstaller binary or a bare symlink too.
+py-modules = ["aether_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "brain*", "memory*", "agents*", "toolbox*", "supervisor*",
+  "security*", "bridge*", "hardware*", "voice*", "skills*", "sync*",
+]
+exclude = ["venv*", "tests*", "build*", "dist*", "custom_tools*"]
