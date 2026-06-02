@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
 from enum import Enum
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .lancedb_store import LanceDBStore
 from .rag_engine import RAGEngine
@@ -107,7 +107,7 @@ class MemoryManager:
             os.makedirs(self.session_dir, exist_ok=True)
             session_file = os.path.join(self.session_dir, "last_session.json")
             data = {
-                "saved_at": datetime.utcnow().isoformat(),
+                "saved_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 "working_memory": [
                     {
                         "id": e.id,
@@ -140,7 +140,7 @@ class MemoryManager:
         tier_enum = MemoryTier(tier)
         entry_metadata = metadata or {}
         entry_metadata["tier"] = tier
-        entry_metadata["stored_at"] = datetime.utcnow().isoformat()
+        entry_metadata["stored_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         
         if tier_enum == MemoryTier.WORKING:
             # Working memory is in-session only
@@ -150,8 +150,8 @@ class MemoryManager:
                 tier=tier_enum,
                 metadata=entry_metadata,
                 embedding=None,
-                created_at=datetime.utcnow(),
-                accessed_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                accessed_at=datetime.now(timezone.utc).replace(tzinfo=None)
             )
             
             # Apply LRU if at limit
@@ -286,7 +286,7 @@ class MemoryManager:
     async def cleanup_short_term(self) -> int:
         """Remove expired short-term memories"""
         
-        cutoff = datetime.utcnow() - self.short_term_ttl
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - self.short_term_ttl
         return await self.db_store.delete_before(
             table_name="short_term_memory",
             before=cutoff
@@ -394,7 +394,7 @@ Capsule Summary:"""
         updated_metadata = entry.get("metadata", {})
         updated_metadata["has_capsule"] = True
         updated_metadata["capsule_summary"] = summary.strip()
-        updated_metadata["capsule_created_at"] = datetime.utcnow().isoformat()
+        updated_metadata["capsule_created_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         
         # Store the updated entry (re-add with same content but updated metadata)
         await self.db_store.update_metadata(

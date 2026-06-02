@@ -1,0 +1,49 @@
+[Unit]
+Description=Nexus AIOS Orchestrator — Process Supervisor + REST API
+Documentation=https://github.com/nexus-aios
+After=network.target nexus-ollama.service
+Wants=nexus-ollama.service
+
+[Service]
+Type=simple
+User=nexus
+Group=nexus
+WorkingDirectory=/opt/nexus/app
+
+# Bootstrap venv on first run
+ExecStartPre=/opt/nexus/bin/nexus-setup
+
+# Start the Python orchestrator (manages kernel + REST API on port 9600)
+ExecStart=/opt/nexus/bin/nexus-core --daemon --port 9600
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+# Environment
+Environment="NEXUS_HOME=/opt/nexus"
+Environment="NEXUS_DATA=/var/lib/nexus"
+Environment="OLLAMA_HOST=http://localhost:11434"
+Environment="PYTHONUNBUFFERED=1"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/nexus /var/log/nexus /opt/nexus /tmp
+PrivateTmp=true
+
+# D-Bus access
+BusName=org.nexus.Agent
+
+# Resource limits
+MemoryMax=8G
+TasksMax=256
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-core
+
+[Install]
+WantedBy=multi-user.target

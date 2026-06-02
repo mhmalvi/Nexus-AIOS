@@ -5,7 +5,7 @@ Comprehensive logging for all agentic actions
 
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import deque
 import json
 
@@ -54,7 +54,7 @@ class AuditLogger:
         self._entry_counter += 1
         entry = AuditEntry(
             id=f"audit_{self._entry_counter}",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None),
             event_type=event_type,
             action=action,
             details=details or {},

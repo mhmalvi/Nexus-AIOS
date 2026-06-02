@@ -1,0 +1,28 @@
+[Unit]
+Description=Ollama LLM Server for Nexus AIOS
+Documentation=https://ollama.ai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nexus
+Group=nexus
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+
+# Environment
+Environment="OLLAMA_MODELS=/var/lib/nexus/models"
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+
+# GPU access (for NVIDIA)
+SupplementaryGroups=video render
+
+# Resource limits
+MemoryMax=16G
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

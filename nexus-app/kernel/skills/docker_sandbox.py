@@ -1,7 +1,7 @@
 """
 Nexus Docker Sandbox
 Provides isolated execution environments for untrusted code.
-Adopted from OpenClaw's Dockerfile.sandbox pattern.
+Adopted from a standard sandbox Dockerfile pattern.
 
 Usage:
     sandbox = DockerSandbox()
@@ -57,7 +57,7 @@ class DockerSandbox:
     """
     Docker-based sandboxing for untrusted code execution.
     
-    Uses the Nexus sandbox image (based on OpenClaw's Dockerfile.sandbox)
+    Uses the Nexus sandbox image (based on a standard sandbox Dockerfile)
     to run commands in an isolated environment with:
     - No network access (default)
     - Memory/CPU limits
@@ -222,7 +222,7 @@ class DockerSandbox:
             pass
 
     def _generate_dockerfile(self) -> str:
-        """Generate the sandbox Dockerfile (based on OpenClaw pattern)."""
+        """Generate the sandbox Dockerfile (based on a standard pattern)."""
         return """FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive

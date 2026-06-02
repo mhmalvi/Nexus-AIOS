@@ -9,6 +9,8 @@ import os
 from typing import Optional, Callable
 from pathlib import Path
 
+from .audio_lock import get_audio_lock
+
 
 class TTSEngine:
     """
@@ -149,14 +151,21 @@ class TTSEngine:
         try:
             import sounddevice as sd
             import numpy as np
-            
+
             # Piper outputs 16-bit PCM at 22050 Hz by default
             audio = np.frombuffer(audio_data, dtype=np.int16)
-            
-            # Play audio
-            sd.play(audio, samplerate=22050)
-            sd.wait()  # Wait for playback to finish
-            
+
+            def _play_blocking():
+                sd.play(audio, samplerate=22050)
+                sd.wait()  # Wait for playback to finish
+
+            # Serialize against mic capture. Overlapping PortAudio input+output
+            # crashes the process on Windows, so playback holds the shared audio
+            # lock (half-duplex) and runs off the event loop.
+            loop = asyncio.get_event_loop()
+            async with get_audio_lock():
+                await loop.run_in_executor(None, _play_blocking)
+
         except ImportError:
             print("⚠️ sounddevice not available for audio playback")
             # Could fall back to wave file + system player

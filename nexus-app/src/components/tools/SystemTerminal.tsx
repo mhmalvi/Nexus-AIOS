@@ -264,9 +264,12 @@ ROUTING: ${stats.llm_routing_enabled ? 'ENABLED' : 'DISABLED'}
                     break;
 
                 default:
-                    // Execute via kernel shell
+                    // Execute via the KERNEL (supervisor-gated + audited), not the
+                    // raw Rust shell. Origin 'terminal' = trusted local dev → full
+                    // power without HIL nagging, but catastrophic patterns are still
+                    // caught and everything is logged (M0-1).
                     try {
-                        const output = await kernelApi.executeShell(cmd, path);
+                        const output = await kernelApi.runShell(cmd, path, 'terminal');
                         addToHistory({ type: 'output', content: output, timestamp: new Date() });
                     } catch (e: any) {
                         addToHistory({ type: 'error', content: e.message || `Error executing '${main}'`, timestamp: new Date() });

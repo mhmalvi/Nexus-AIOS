@@ -97,7 +97,7 @@ class AgenticSupervisor:
                 warnings.append(f"[AST] {finding.title}")
 
         # Assess risk level
-        risk_level = self.safety_checker.assess_risk(action)
+        risk_level, recognized = self.safety_checker.classify_risk(action)
 
         # Check intent alignment if original intent provided
         is_aligned = True
@@ -110,8 +110,13 @@ class AgenticSupervisor:
             if not is_aligned:
                 warnings.append(f"Action may not align with intent: {alignment.reason}")
 
-        # Determine if approval is required
+        # Determine if approval is required. Fail safe: an action that matched
+        # no known risk keyword is treated as approval-required rather than
+        # silently running at the implicit "medium" default (F4).
         requires_approval = risk_level in ["high", "critical"]
+        if not recognized:
+            requires_approval = True
+            warnings.append("Unrecognized action — requires approval (fail-safe)")
 
         # Check if already approved
         if requires_approval and action in self._approved_actions:
@@ -189,7 +194,7 @@ class AgenticSupervisor:
                 warnings.append(f"[AST] {finding.title}")
 
         # Assess risk level
-        risk_level = self.safety_checker.assess_risk(action)
+        risk_level, recognized = self.safety_checker.classify_risk(action)
 
         # Check intent alignment
         is_aligned = True
@@ -212,8 +217,11 @@ class AgenticSupervisor:
             if not is_aligned:
                 warnings.append(f"Action may not align with intent: {alignment.reason}")
 
-        # Determine if approval is required
+        # Determine if approval is required (fail safe on unrecognized actions)
         requires_approval = risk_level in ["high", "critical"]
+        if not recognized:
+            requires_approval = True
+            warnings.append("Unrecognized action — requires approval (fail-safe)")
 
         if requires_approval and action in self._approved_actions:
             requires_approval = False

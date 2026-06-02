@@ -11,6 +11,8 @@ from typing import Optional, Callable, Any
 from dataclasses import dataclass
 import numpy as np
 
+from .audio_lock import get_audio_lock
+
 # Lazy imports for optional voice dependencies
 _whisper_model = None
 _sounddevice = None
@@ -254,26 +256,36 @@ class VoicePipeline:
         
         self._is_listening = True
         self._stop_event.clear()
-        
+
         # Record audio
         print(f"🎤 Listening for {duration} seconds on device {self.device_index}...")
-        
+
+        def _record_blocking():
+            """Blocking capture — runs in an executor thread, never on the loop."""
+            data = sd.rec(
+                int(duration * self.sample_rate),
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype='float32',
+                device=self.device_index,
+            )
+            sd.wait()  # Wait until recording is finished
+            return data
+
+        loop = asyncio.get_event_loop()
         try:
-            try:
-                audio_data = sd.rec(
-                    int(duration * self.sample_rate),
-                    samplerate=self.sample_rate,
-                    channels=1,
-                    dtype='float32',
-                    device=self.device_index
-                )
-                sd.wait()  # Wait until recording is finished
-            except Exception as e:
-                # Common PortAudio overflow error
-                if "input overflow" in str(e).lower():
-                    print("⚠️ Audio input overflow (ignoring)", file=sys.stderr)
-                    return None
-                raise e
+            # Serialize against TTS playback (and any other capture). Driving
+            # PortAudio for overlapping input+output crashes the process on
+            # Windows — the shared lock makes audio strictly half-duplex.
+            async with get_audio_lock():
+                try:
+                    audio_data = await loop.run_in_executor(None, _record_blocking)
+                except Exception as e:
+                    # Common PortAudio overflow error
+                    if "input overflow" in str(e).lower():
+                        print("⚠️ Audio input overflow (ignoring)", file=sys.stderr)
+                        return None
+                    raise e
             
             # Flatten to 1D
             audio_data = audio_data.flatten()

@@ -2,7 +2,7 @@
 AETHER Tool Policy Engine — Per-Agent/Channel Tool Access Control
 
 Controls which tools each agent or channel is allowed to use.
-Inspired by OpenClaw's tool-policy.ts.
+Inspired by open-source agent frameworks.
 
 Profiles:
 - minimal:    session_status only (read-only observers)

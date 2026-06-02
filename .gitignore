@@ -42,3 +42,13 @@ dist/
 # Temporary
 *.tmp
 *.bak
+
+# Local Claude settings
+.claude/settings.local.json
+
+# Runtime data stores
+data/lancedb/
+
+# External clones / vendored repos (not tracked here)
+openclaw/
+cloned_repo/

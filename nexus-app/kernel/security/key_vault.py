@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
+from . import os_secret
+
 # Graceful fallback if cryptography is not installed
 try:
     from cryptography.fernet import Fernet
@@ -37,24 +39,39 @@ class KeyVault:
             self._fernet = Fernet(self._load_or_create_key())
 
     def _load_or_create_key(self) -> bytes:
-        """Load the vault key from disk or generate a new one."""
+        """Load the vault key from disk or generate a new one.
+
+        On Windows the key is wrapped with DPAPI (user-bound) so that copying
+        ~/.aether/.vault_key to another user/machine is useless (M1-3). A
+        pre-existing plaintext key is transparently migrated to the protected
+        form on load. On Unix we rely on 0600 file permissions.
+        """
         self._key_path.parent.mkdir(parents=True, exist_ok=True)
 
         if self._key_path.exists():
-            key = self._key_path.read_bytes().strip()
+            raw = self._key_path.read_bytes().strip()
+            try:
+                key = os_secret.unprotect(raw)
+            except Exception:
+                key = raw  # unreadable protection → treat as raw (will re-key below)
+            # Migrate a legacy plaintext key to OS-protected storage in place.
+            if not os_secret.is_protected(raw) and os_secret.available():
+                self._write_key(key)
         else:
             key = Fernet.generate_key()
-            self._key_path.write_bytes(key)
+            self._write_key(key)
 
-        # Restrict permissions on Unix
+        return key
+
+    def _write_key(self, key: bytes) -> None:
+        """Persist the vault key, OS-protected where available, 0600 on Unix."""
+        self._key_path.write_bytes(os_secret.protect(key))
         if os.name != "nt":
             try:
                 os.chmod(self._key_path, 0o600)
                 os.chmod(self._key_path.parent, 0o700)
             except OSError:
                 pass
-
-        return key
 
     @property
     def available(self) -> bool:

@@ -50,7 +50,23 @@ class FirewallRule:
     def matches(self, url: str, agent: str = "*") -> bool:
         if self.agent_id != "*" and self.agent_id != agent:
             return False
-        return fnmatch.fnmatch(url.lower(), self.pattern.lower())
+        pat = self.pattern.lower()
+        u = url.lower()
+        # Match against the URL's HOST as well as the full URL. Domain-glob
+        # patterns like "*.openai.com" or "api.openai.com" are the common case;
+        # matching only the full URL meant they never fired against
+        # "https://api.openai.com/v1/..." (allow rules were dead → only the
+        # default DENY ever applied). Host-aware matching makes the allowlist work.
+        host = ""
+        try:
+            from urllib.parse import urlparse
+            host = (urlparse(url).hostname or "").lower()
+        except Exception:
+            pass
+        if host and (fnmatch.fnmatch(host, pat) or host == pat):
+            return True
+        # Also honor full-URL/path patterns (e.g. "*.example.com/admin/*").
+        return fnmatch.fnmatch(u, pat)
 
 
 @dataclass

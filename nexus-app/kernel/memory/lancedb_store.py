@@ -4,10 +4,33 @@ Provides hybrid search combining vector and full-text retrieval
 """
 
 import os
+import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import asyncio
+
+logger = logging.getLogger(__name__)
+
+# Embedding dimensions per model. nomic-embed-text produces 768-dim vectors;
+# the historical 384 fallback caused dimension mismatches / silent degradation.
+_EMBEDDING_DIMS = {
+    "nomic-embed-text": 768,
+    "mxbai-embed-large": 1024,
+    "all-minilm": 384,
+}
+
+
+def _sql_literal(value: Any) -> str:
+    """Render a value as a safe single-quoted SQL string literal.
+
+    LanceDB filter clauses were previously built by raw f-string
+    interpolation, allowing a value containing ``'`` to break out of the
+    predicate (filter/predicate injection, F-NEW-3). We escape embedded
+    single quotes per the SQL standard (``'`` -> ``''``) and strip NULs.
+    """
+    s = str(value).replace("\x00", "")
+    return "'" + s.replace("'", "''") + "'"
 
 
 class LanceDBStore:
@@ -28,6 +51,7 @@ class LanceDBStore:
     ):
         self.db_path = db_path
         self.embedding_model = embedding_model
+        self.embedding_dim = _EMBEDDING_DIMS.get(embedding_model, 768)
         self.db = None
         self._initialized = False
         
@@ -75,7 +99,7 @@ class LanceDBStore:
         entry_id = str(uuid.uuid4())
         entry_metadata = metadata or {}
         entry_metadata["id"] = entry_id
-        entry_metadata["created_at"] = datetime.utcnow().isoformat()
+        entry_metadata["created_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         
         if self.db is None:
             # Mock storage
@@ -89,7 +113,7 @@ class LanceDBStore:
             "content": content,
             "metadata": entry_metadata,
             "vector": embedding,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             # H-MEM hierarchical fields
             "domain": domain or "general",
             "category": category or "uncategorized",
@@ -146,11 +170,11 @@ class LanceDBStore:
         filter_clause = None
         filters = []
         if domain:
-            filters.append(f"domain = '{domain}'")
+            filters.append(f"domain = {_sql_literal(domain)}")
         if category:
-            filters.append(f"category = '{category}'")
+            filters.append(f"category = {_sql_literal(category)}")
         if max_abstraction is not None:
-            filters.append(f"abstraction_level <= {max_abstraction}")
+            filters.append(f"abstraction_level <= {int(max_abstraction)}")
         if filters:
             filter_clause = " AND ".join(filters)
         
@@ -272,12 +296,18 @@ class LanceDBStore:
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
-                        return result.get("embedding", [0.0] * 384)
-        except Exception:
-            pass
-        
-        # Fallback: return zero vector
-        return [0.0] * 384
+                        embedding = result.get("embedding")
+                        if embedding:
+                            return embedding
+                        logger.error("Embedding endpoint returned empty vector for model %s", self.embedding_model)
+                    else:
+                        logger.error("Embedding request failed: HTTP %s", response.status)
+        except Exception as e:
+            logger.error("Embedding request error (%s): %s", self.embedding_model, e)
+
+        # Fallback: zero vector sized to the configured model so we don't
+        # corrupt the index with a wrong-dimension vector (F-NEW-4).
+        return [0.0] * self.embedding_dim
     
     async def get_by_id(
         self,
@@ -293,7 +323,7 @@ class LanceDBStore:
         
         try:
             table = self.db.open_table(table_name)
-            results = table.search().where(f"id = '{entry_id}'").to_list()
+            results = table.search().where(f"id = {_sql_literal(entry_id)}").to_list()
             return results[0] if results else None
         except Exception:
             return None
@@ -312,7 +342,7 @@ class LanceDBStore:
         
         try:
             table = self.db.open_table(table_name)
-            table.delete(f"id = '{entry_id}'")
+            table.delete(f"id = {_sql_literal(entry_id)}")
             return True
         except Exception:
             return False
@@ -332,11 +362,53 @@ class LanceDBStore:
         try:
             table = self.db.open_table(table_name)
             before_str = before.isoformat()
-            table.delete(f"created_at < '{before_str}'")
+            table.delete(f"created_at < {_sql_literal(before_str)}")
             return 1  # LanceDB doesn't return delete count
         except Exception:
             return 0
     
+    async def list_rows(
+        self,
+        table_name: str,
+        where: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """List rows via a real table scan (optionally filtered by a predicate).
+
+        Replaces the old `search(query="*")` pseudo-scan that embedded a
+        meaningless "*" vector and ran hybrid RRF just to enumerate rows.
+        Returns raw row dicts (id/content/metadata/...).
+        """
+        await self._ensure_initialized()
+        if self.db is None:
+            return []
+        try:
+            table = self.db.open_table(table_name)
+            query = table.search()  # no vector → plain scan in this LanceDB version
+            if where:
+                query = query.where(where)
+            if limit:
+                query = query.limit(limit)
+            return query.to_list()
+        except Exception:
+            return []
+
+    async def delete_where(self, table_name: str, where: str) -> bool:
+        """Delete all rows matching a SQL predicate in a single operation.
+
+        Callers must pass a safe predicate; use `_sql_literal()` for any value
+        that derives from untrusted input.
+        """
+        await self._ensure_initialized()
+        if self.db is None:
+            return False
+        try:
+            table = self.db.open_table(table_name)
+            table.delete(where)
+            return True
+        except Exception:
+            return False
+
     async def clear_table(self, table_name: str) -> int:
         """Clear all entries from a table"""
         
@@ -368,7 +440,7 @@ class LanceDBStore:
             table = self.db.open_table(table_name)
             
             # Get existing entry
-            results = table.search().where(f"id = '{entry_id}'").to_list()
+            results = table.search().where(f"id = {_sql_literal(entry_id)}").to_list()
             if not results:
                 return False
             
@@ -384,7 +456,7 @@ class LanceDBStore:
             }]
             
             # Delete old entry and add updated one
-            table.delete(f"id = '{entry_id}'")
+            table.delete(f"id = {_sql_literal(entry_id)}")
             table.add(updated_data)
             
             return True

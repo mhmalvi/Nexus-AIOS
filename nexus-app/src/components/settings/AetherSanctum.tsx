@@ -1,9 +1,31 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Mic, Activity, Database, Lock, Sun, Moon, Palette, Keyboard, ChevronDown, ChevronUp, PanelBottomClose, Brain, Key } from "lucide-react";
+import { Eye, EyeOff, Mic, Activity, Database, Lock, Sun, Moon, Palette, Keyboard, ChevronDown, ChevronUp, PanelBottomClose, Brain, Key, MessageSquare, Globe, Cpu } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 import { systemApi } from "../../services/tauriApi";
+
+/** A reusable on/off toggle row. */
+function ToggleRow({ label, desc, value, onChange }: { label: string; desc: string; value: boolean; onChange: (v: boolean) => void; }) {
+    return (
+        <div
+            className="flex items-center justify-between bg-muted/30 rounded-xl border border-border p-4 cursor-pointer hover:bg-muted/40 transition-colors"
+            onClick={() => onChange(!value)}
+        >
+            <div>
+                <div className="text-sm font-medium text-foreground">{label}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
+            </div>
+            <div className={`w-11 h-6 rounded-full transition-colors duration-200 relative shrink-0 ${value ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
+                <motion.div
+                    className="absolute top-0.5 w-5 h-5 bg-background rounded-full shadow-md"
+                    animate={{ left: value ? 22 : 2 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                />
+            </div>
+        </div>
+    );
+}
 
 const ACCENT_COLORS = [
     { name: 'Cyan', value: '#00D4FF' },
@@ -31,6 +53,31 @@ export function AetherSanctum() {
     const [resonance, setResonance] = useState({ x: 50, y: 50 });
     const [retention, setRetention] = useState<'ephemeral' | 'eternal'>('ephemeral');
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+    // Messaging (Async Bridge) + system toggles — loaded from the kernel config.
+    const [messagingProvider, setMessagingProvider] = useState<'none' | 'async'>('none');
+    const [asyncUrl, setAsyncUrl] = useState('http://localhost:4242');
+    const [asyncGateway, setAsyncGateway] = useState('');
+    const [asyncTokenSet, setAsyncTokenSet] = useState(false);
+    const [voiceEnabled, setVoiceEnabled] = useState(false);
+    const [llmRouting, setLlmRouting] = useState(false);
+    const [browserHeadless, setBrowserHeadless] = useState(true);
+
+    useEffect(() => {
+        let alive = true;
+        systemApi.getConfig().then((res) => {
+            if (!alive || !res?.success || !res.data) return;
+            const c = res.data;
+            if (c.messaging_provider) setMessagingProvider(c.messaging_provider === 'async' ? 'async' : 'none');
+            if (c.async_bridge_url) setAsyncUrl(c.async_bridge_url);
+            if (typeof c.async_bridge_gateway === 'string') setAsyncGateway(c.async_bridge_gateway);
+            setAsyncTokenSet(!!c.async_bridge_token_set);
+            setVoiceEnabled(!!c.voice_enabled);
+            setLlmRouting(!!c.enable_llm_routing);
+            setBrowserHeadless(c.browser_headless !== false);
+        }).catch(() => {});
+        return () => { alive = false; };
+    }, []);
 
     const handlePerceptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = parseInt(e.target.value);
@@ -282,6 +329,105 @@ export function AetherSanctum() {
                         <div className="absolute bottom-2 right-4 text-[10px] text-muted-foreground font-mono">
                             WARMTH [X] / PRECISION [Y]
                         </div>
+                    </div>
+                </section>
+
+                {/* MESSAGING (Async Bridge) */}
+                <section className="space-y-4">
+                    <div className="flex items-center justify-between text-sm uppercase tracking-widest text-muted-foreground">
+                        <span>Messaging</span>
+                        <MessageSquare className="w-4 h-4" />
+                    </div>
+
+                    {/* Provider selector */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <button
+                            onClick={() => { setMessagingProvider('none'); systemApi.updateConfig({ messaging_provider: 'none' }); }}
+                            className={`h-16 rounded-xl border flex items-center justify-center gap-2 transition-all ${messagingProvider === 'none'
+                                ? 'bg-primary/10 border-primary text-primary'
+                                : 'bg-muted/30 border-border text-muted-foreground hover:bg-muted/50'}`}
+                        >
+                            <span className="text-xs tracking-widest uppercase">Disabled</span>
+                        </button>
+                        <button
+                            onClick={() => { setMessagingProvider('async'); systemApi.updateConfig({ messaging_provider: 'async' }); }}
+                            className={`h-16 rounded-xl border flex items-center justify-center gap-2 transition-all ${messagingProvider === 'async'
+                                ? 'bg-primary/10 border-primary text-primary'
+                                : 'bg-muted/30 border-border text-muted-foreground hover:bg-muted/50'}`}
+                        >
+                            <Globe className="w-4 h-4" />
+                            <span className="text-xs tracking-widest uppercase">Async Bridge</span>
+                        </button>
+                    </div>
+
+                    {messagingProvider === 'async' && (
+                        <div className="space-y-3">
+                            <div className="p-3 bg-muted/20 rounded-xl border border-border/50">
+                                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Gateway URL</label>
+                                <input
+                                    value={asyncUrl}
+                                    onChange={(e) => setAsyncUrl(e.target.value)}
+                                    onBlur={() => systemApi.updateConfig({ async_bridge_url: asyncUrl.trim() })}
+                                    placeholder="http://localhost:4242"
+                                    className="w-full bg-transparent border-none text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none h-6"
+                                />
+                            </div>
+                            <div className="p-3 bg-muted/20 rounded-xl border border-border/50">
+                                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">
+                                    API Token {asyncTokenSet && <span className="text-green-500 normal-case">· saved</span>}
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder={asyncTokenSet ? '•••••••• (leave blank to keep)' : 'Enter gateway token'}
+                                    className="w-full bg-transparent border-none text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none h-6"
+                                    onBlur={(e) => {
+                                        const val = e.target.value.trim();
+                                        if (val) { systemApi.updateConfig({ async_bridge_token: val }); setAsyncTokenSet(true); e.target.value = ''; }
+                                    }}
+                                />
+                            </div>
+                            <div className="p-3 bg-muted/20 rounded-xl border border-border/50">
+                                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1 block">Default Gateway Name</label>
+                                <input
+                                    value={asyncGateway}
+                                    onChange={(e) => setAsyncGateway(e.target.value)}
+                                    onBlur={() => systemApi.updateConfig({ async_bridge_gateway: asyncGateway.trim() })}
+                                    placeholder="e.g. nexus-telegram"
+                                    className="w-full bg-transparent border-none text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none h-6"
+                                />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground/50 italic">
+                                Restart the kernel after changing the provider. Run a self-hosted messaging gateway (see bridge/ASYNC_BRIDGE.md).
+                            </p>
+                        </div>
+                    )}
+                </section>
+
+                {/* SYSTEM TOGGLES */}
+                <section className="space-y-4">
+                    <div className="flex items-center justify-between text-sm uppercase tracking-widest text-muted-foreground">
+                        <span>System</span>
+                        <Cpu className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-3">
+                        <ToggleRow
+                            label="Voice"
+                            desc="Enable the local speech-to-text / text-to-speech pipeline"
+                            value={voiceEnabled}
+                            onChange={(v) => { setVoiceEnabled(v); systemApi.updateConfig({ voice_enabled: v }); }}
+                        />
+                        <ToggleRow
+                            label="Per-query Model Routing"
+                            desc="Switch Ollama models per query (adds reload latency)"
+                            value={llmRouting}
+                            onChange={(v) => { setLlmRouting(v); systemApi.updateConfig({ enable_llm_routing: v }); }}
+                        />
+                        <ToggleRow
+                            label="Headless Browser"
+                            desc="Render the in-app browser via screenshots (no popup window)"
+                            value={browserHeadless}
+                            onChange={(v) => { setBrowserHeadless(v); systemApi.updateConfig({ browser_headless: v }); }}
+                        />
                     </div>
                 </section>
 

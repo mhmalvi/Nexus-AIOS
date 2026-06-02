@@ -9,7 +9,7 @@ import { AetherAwakening } from './components/setup/AetherAwakening';
 import { ProviderSetup } from './components/setup/ProviderSetup';
 import { Onboarding } from './components/setup/Onboarding';
 import { useStore } from './context/StoreContext';
-import { mockTauri } from './services/mockTauri';
+import { kernelEventBus } from './services/kernelEventBus';
 
 function App() {
   const {
@@ -35,23 +35,23 @@ function App() {
 
   useEffect(() => {
     // Subscribe to simulated backend events
-    const unsubThoughts = mockTauri.subscribeThought((thought) => {
+    const unsubThoughts = kernelEventBus.subscribeThought((thought) => {
       addThought(thought);
     });
 
-    const unsubHIL = mockTauri.subscribeHIL((action) => {
+    const unsubHIL = kernelEventBus.subscribeHIL((action) => {
       setPendingAction(action);
     });
 
-    const unsubAgents = mockTauri.subscribeAgentUpdate((payload) => {
+    const unsubAgents = kernelEventBus.subscribeAgentUpdate((payload) => {
       updateAgentStatus(payload.id, payload.updates);
     });
 
-    const unsubNotify = mockTauri.subscribeNotification((notification) => {
+    const unsubNotify = kernelEventBus.subscribeNotification((notification) => {
       addNotification(notification);
     });
 
-    const unsubChunk = mockTauri.subscribeChunk((chunk) => {
+    const unsubChunk = kernelEventBus.subscribeChunk((chunk) => {
       let id = streamingIdRef.current;
       if (!id) {
         id = Date.now().toString();
@@ -68,7 +68,7 @@ function App() {
       updateMessage(id, streamContentRef.current);
     });
 
-    const unsubResponses = mockTauri.subscribeResponse((res) => {
+    const unsubResponses = kernelEventBus.subscribeResponse((res) => {
       // Handle completion of streamed response or new standalone response
       if (res.message_type === 'response') {
         if (streamingIdRef.current) {
@@ -86,16 +86,22 @@ function App() {
           });
         }
       } else if (!res.success && res.message_type !== 'chunk') {
-        addMessage({
-          id: Date.now().toString(),
-          role: 'system',
-          content: `⚠️ Kernel Error: ${res.error || "Operation failed."}`,
-          timestamp: new Date()
-        });
+        // Benign/transient outcomes that have their own UI (voice status,
+        // messaging panel) must NOT spam the chat as "Kernel Error".
+        const quietTypes = ['voice_error', 'voice_status', 'messaging_error', 'channel_list'];
+        const isNoSpeech = typeof res.error === 'string' && /no speech/i.test(res.error);
+        if (!quietTypes.includes(res.message_type as string) && !isNoSpeech) {
+          addMessage({
+            id: Date.now().toString(),
+            role: 'system',
+            content: `⚠️ Kernel Error: ${res.error || "Operation failed."}`,
+            timestamp: new Date()
+          });
+        }
       }
     });
 
-    const unsubVoiceStatus = mockTauri.subscribeVoiceStatus((payload: any) => {
+    const unsubVoiceStatus = kernelEventBus.subscribeVoiceStatus((payload: any) => {
       if (typeof payload === 'boolean') {
         if (payload) startListening();
         else stopListening();
@@ -109,7 +115,7 @@ function App() {
       }
     });
 
-    const unsubVoiceTranscript = mockTauri.subscribeVoiceTranscript((text: string) => {
+    const unsubVoiceTranscript = kernelEventBus.subscribeVoiceTranscript((text: string) => {
       setTranscript(text);
     });
 
@@ -229,7 +235,7 @@ function App() {
 
     // Call backend to resolve the approval
     try {
-      await mockTauri.executeAction(action.id, true, 'Architect granted');
+      await kernelEventBus.executeAction(action.id, true, 'Architect granted');
       addMessage({
         id: Date.now().toString(),
         role: 'system',
@@ -254,7 +260,7 @@ function App() {
     // Call backend to deny the approval
     try {
       if (action?.id) {
-        await mockTauri.executeAction(action.id, false, 'Architect withheld');
+        await kernelEventBus.executeAction(action.id, false, 'Architect withheld');
       }
       addMessage({
         id: Date.now().toString(),
@@ -276,7 +282,7 @@ function App() {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'h' && e.ctrlKey) {
-        mockTauri.triggerHIL();
+        kernelEventBus.triggerHIL();
       }
     };
     window.addEventListener('keydown', handleKey);

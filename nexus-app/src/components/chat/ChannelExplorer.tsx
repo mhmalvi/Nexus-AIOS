@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { messagingApi } from '../../services/tauriApi';
-import { mockTauri } from '../../services/mockTauri';
+import { kernelEventBus } from '../../services/kernelEventBus';
 import { Hash, MessageCircle, Server, Globe, Smartphone } from 'lucide-react';
 
 interface Channel {
@@ -37,9 +37,9 @@ export function ChannelExplorer({ onChannelClick }: ChannelExplorerProps) {
         return () => clearInterval(interval);
     }, [loadChannels]);
 
-    // Subscribe to real-time openclaw events
+    // Subscribe to real-time messaging events
     useEffect(() => {
-        const unsub = mockTauri.subscribeOpenClaw((msg: any) => {
+        const unsub = kernelEventBus.subscribeAsyncMessage((msg: any) => {
             const channelType = msg.channel || msg.platform || 'unknown';
             setUnreadCounts(prev => ({
                 ...prev,
@@ -109,7 +109,7 @@ export function ChannelExplorer({ onChannelClick }: ChannelExplorerProps) {
 
                 {channels.length === 0 && (
                     <div className="px-2 py-4 text-center text-xs text-muted-foreground/50 italic border border-dashed border-border/30 rounded-lg mx-2">
-                        No OpenClaw channels detected
+                        No messaging channels detected
                     </div>
                 )}
             </div>

@@ -21,7 +21,7 @@ export interface KernelStatus {
     federated_learning?: boolean;
     skills_loaded?: number;
     sandbox_available?: boolean;
-    openclaw_connected?: boolean;
+    messaging_connected?: boolean;
     environment?: string;
     security_available?: boolean;
     self_destruct_armed?: boolean; // mapped from self_destruct != None
@@ -138,6 +138,22 @@ import { kernelBridge } from './kernelEventBridge';
 // Check if running in Tauri
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
+// Browser-mode mocks exist ONLY so the UI can render in a plain browser
+// (`npm run dev` without Tauri). They must never silently stand in for a broken
+// backend, so every mock hit warns (once per command). Set VITE_USE_MOCK="false"
+// to disable them entirely and fail loudly instead.
+const MOCK_DISABLED = (import.meta as any)?.env?.VITE_USE_MOCK === 'false';
+
+const _mockWarned = new Set<string>();
+function warnMock(label: string) {
+    if (_mockWarned.has(label)) return;
+    _mockWarned.add(label);
+    console.warn(
+        `⚠️ [tauriApi] MOCK data for "${label}" — NOT connected to the real kernel. ` +
+        `This is browser dev mode; run inside Tauri for live data (or set VITE_USE_MOCK="false" to disable mocks).`
+    );
+}
+
 // Internal API holders
 let invokeFn: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
 let fsFn: FsApi | null = null;
@@ -173,16 +189,26 @@ const initPromise = (async () => {
             console.error("❌ Failed to initialize Tauri API:", e);
             throw e;
         }
+    } else if (MOCK_DISABLED) {
+        // Mocks explicitly disabled outside Tauri — fail loudly so a broken
+        // backend can never be masked by fake data.
+        invokeFn = async <T>(cmd: string): Promise<T> => {
+            throw new Error(
+                `[tauriApi] Not running in Tauri and mocks are disabled (VITE_USE_MOCK=false) — cannot invoke "${cmd}".`
+            );
+        };
+        fsFn = null;
+        console.warn("🌐 Browser mode with mocks DISABLED — kernel calls will fail loudly.");
     } else {
         // Mock implementation for browser mode
         invokeFn = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
-            console.log(`[Browser Mock] ${cmd}`, args);
+            warnMock(cmd);
             return getMockResponse(cmd, args) as T;
         };
 
         fsFn = {
             readDir: async (path) => {
-                console.log(`[Browser Mock] readDir(${path})`);
+                warnMock(`fs.readDir`);
                 // Mock common directories
                 if (path === '/' || path === '' || path === '.') {
                     return [
@@ -364,7 +390,32 @@ export const kernelApi = {
 
     getStatus: async (): Promise<KernelStatus> => (await getInvoke())('get_kernel_status'),
 
+    // DEPRECATED (F1): raw Rust shell, bypasses the kernel supervisor/audit.
+    // Kept only for emergency/dev use; prefer runShell() which routes through
+    // the kernel so commands are trust-gated and audited.
     executeShell: async (command: string, cwd?: string): Promise<string> => (await getInvoke())('execute_shell', { command, cwd }),
+
+    // Kernel-routed shell (M0-1): goes through _handle_command → supervisor →
+    // toolbox.shell. `origin` carries the trust context ('terminal' = trusted
+    // local dev → full power, audited; not bypassable by agents/webview-injection
+    // because untrusted origins get the restricted policy + HIL).
+    runShell: async (shellCommand: string, cwd?: string, origin: string = 'terminal'): Promise<string> => {
+        const payload = JSON.stringify({ command: 'shell', args: [shellCommand], cwd, origin });
+        let res: KernelResponse | undefined;
+        if (isTauri) {
+            try {
+                res = await kernelBridge.sendAndWait(payload, 'command');
+            } catch (e) { /* fall through */ }
+        }
+        if (!res) {
+            res = await (await getInvoke())<KernelResponse>('send_to_kernel', { message: payload, messageType: 'command' });
+        }
+        if (res && res.success) {
+            const out = (res.data && (res.data.output ?? res.data.result)) ?? '';
+            return typeof out === 'string' ? out : JSON.stringify(out);
+        }
+        throw new Error((res && (res.error || (res.message_type === 'approval_required' ? 'Action requires approval' : 'blocked'))) || 'Command failed');
+    },
 
     send: async (message: string, messageType: string = 'query'): Promise<KernelResponse> =>
         (await getInvoke())('send_to_kernel', { message, messageType }),
@@ -698,16 +749,28 @@ export const securityModApi = {
         return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'destruct_status' }), messageType: 'security' });
     },
 
-    initiate: async (level: string, pin: string, voicePrint?: string): Promise<KernelResponse> => {
+    setPin: async (pin: string): Promise<KernelResponse> => {
+        const payload = JSON.stringify({ action: 'set_destruct_pin', data: { pin } });
         if (isTauri) {
             try {
-                const response = await kernelBridge.sendAndWait(
-                    JSON.stringify({ action: 'initiate_destruct', data: { level, pin, voice_print: voicePrint } }), 'security'
-                );
+                const response = await kernelBridge.sendAndWait(payload, 'security');
                 return response || { success: false, error: 'No response' };
             } catch (e) { /* fall through */ }
         }
-        return (await getInvoke())('send_to_kernel', { message: JSON.stringify({ action: 'initiate_destruct', data: { level, pin, voice_print: voicePrint } }), messageType: 'security' });
+        return (await getInvoke())('send_to_kernel', { message: payload, messageType: 'security' });
+    },
+
+    // `confirmationPhrase` is the real second factor for DATA_WIPE / FULL_DESTRUCT
+    // (e.g. "CONFIRM DATA_WIPE"). A bare boolean is no longer accepted by the kernel.
+    initiate: async (level: string, pin: string, confirmationPhrase?: string): Promise<KernelResponse> => {
+        const payload = JSON.stringify({ action: 'initiate_destruct', data: { level, pin, confirmation_phrase: confirmationPhrase } });
+        if (isTauri) {
+            try {
+                const response = await kernelBridge.sendAndWait(payload, 'security');
+                return response || { success: false, error: 'No response' };
+            } catch (e) { /* fall through */ }
+        }
+        return (await getInvoke())('send_to_kernel', { message: payload, messageType: 'security' });
     },
 
     cancel: async (pin: string): Promise<KernelResponse> => {

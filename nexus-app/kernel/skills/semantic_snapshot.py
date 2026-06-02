@@ -1,6 +1,6 @@
 """
 Nexus Semantic Snapshots — Accessibility-Tree-Based Browser Automation
-Ported from OpenClaw's pw-role-snapshot.ts pattern.
+Ported from open-source accessibility-snapshot patterns.
 
 Converts Playwright ARIA snapshots into a compact representation with
 stable element references (e.g. [ref=e1], [ref=e2]) that the LLM can

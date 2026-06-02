@@ -1,6 +1,6 @@
 """
 Nexus Skills Framework
-Adopts the SKILL.md natural-language skill convention from OpenClaw.
+Adopts the SKILL.md natural-language skill convention.
 
 Each skill is a directory containing a SKILL.md with YAML frontmatter
 (name, description, metadata) and markdown instructions that the LLM

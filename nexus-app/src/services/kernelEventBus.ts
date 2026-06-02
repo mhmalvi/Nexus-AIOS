@@ -188,7 +188,7 @@ if (isTauri) {
           federated_learning: false,
           skills_loaded: 12,
           sandbox_available: true,
-          openclaw_connected: true,
+          messaging_connected: true,
           environment: 'windows',
           security_available: true,
           self_destruct_armed: false,
@@ -309,7 +309,7 @@ if (isTauri) {
 
 type Listener<T> = (payload: T) => void;
 
-class MockTauriService {
+class KernelEventBus {
   private thoughtListeners: Listener<ThoughtEvent>[] = [];
   private responseListeners: Listener<any>[] = [];
   private hilListeners: Listener<ActionRequest>[] = [];
@@ -319,7 +319,7 @@ class MockTauriService {
   private voiceTranscriptListeners: Listener<string>[] = [];
   private chunkListeners: Listener<string>[] = [];
   private taoListeners: Listener<{ type: string, content: string, step_id?: string, details?: any }>[] = [];
-  private openclawListeners: Listener<any>[] = [];
+  private asyncMessageListeners: Listener<any>[] = [];
 
   constructor() {
     this.initListeners();
@@ -398,8 +398,8 @@ class MockTauriService {
           this.emitVoiceStatus(innerPayload.status === 'listening');
         } else if (innerEvent === 'voice_transcription') {
           this.emitVoiceTranscript(innerPayload.text);
-        } else if (innerEvent === 'openclaw_message') {
-          this.emitOpenClaw(innerPayload);
+        } else if (innerEvent === 'async_message') {
+          this.emitAsyncMessage(innerPayload);
         }
         return;
       }
@@ -493,9 +493,9 @@ class MockTauriService {
     return () => { this.taoListeners = this.taoListeners.filter(l => l !== callback); };
   }
 
-  subscribeOpenClaw(callback: Listener<any>) {
-    this.openclawListeners.push(callback);
-    return () => { this.openclawListeners = this.openclawListeners.filter(l => l !== callback); };
+  subscribeAsyncMessage(callback: Listener<any>) {
+    this.asyncMessageListeners.push(callback);
+    return () => { this.asyncMessageListeners = this.asyncMessageListeners.filter(l => l !== callback); };
   }
 
   private emitResponse(response: any) {
@@ -534,8 +534,8 @@ class MockTauriService {
     this.taoListeners.forEach(l => l(tao));
   }
 
-  private emitOpenClaw(payload: any) {
-    this.openclawListeners.forEach(l => l(payload));
+  private emitAsyncMessage(payload: any) {
+    this.asyncMessageListeners.forEach(l => l(payload));
   }
 
   // Debug / Manual Triggers
@@ -629,5 +629,5 @@ class MockTauriService {
   }
 }
 
-export const mockTauri = new MockTauriService();
+export const kernelEventBus = new KernelEventBus();
 

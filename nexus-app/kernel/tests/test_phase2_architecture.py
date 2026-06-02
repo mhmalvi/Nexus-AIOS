@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 # Add kernel to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'kernel'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from brain.query_cache import QueryCache
 from runtime_config import RuntimeConfig, DEFAULT_CONFIG

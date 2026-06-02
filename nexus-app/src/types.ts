@@ -30,7 +30,7 @@ export interface Artifact {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant' | 'system' | 'openclaw';
+  role: 'user' | 'assistant' | 'system' | 'async';
   content: string;
   timestamp: Date;
   tool?: 'terminal' | 'browser' | 'search' | 'code';

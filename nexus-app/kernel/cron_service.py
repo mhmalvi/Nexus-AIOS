@@ -16,7 +16,7 @@ Features:
 - Configurable per-job timeout
 - Natural language schedule parsing
 
-Inspired by OpenClaw's cron-service.ts
+Inspired by open-source agent frameworks.
 """
 
 import asyncio

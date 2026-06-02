@@ -51,9 +51,17 @@ class QueryCache:
         self._stats = {"hits": 0, "misses": 0, "evictions": 0}
 
     @staticmethod
-    def make_key(prompt: str, model: str = "", temperature: float = 0.0) -> str:
-        """Create a deterministic cache key from query parameters."""
-        raw = f"{model}|{temperature:.2f}|{prompt}"
+    def make_key(prompt: str, model: str = "", temperature: float = 0.0,
+                 context: str = "") -> str:
+        """Create a deterministic cache key from query parameters.
+
+        `context` folds the retrieved RAG context (or any context-window
+        material) into the key, so the same prompt against *different* retrieved
+        context produces a different key — preventing a stale cached answer from
+        being served after memory/context changed.
+        """
+        ctx_hash = hashlib.sha256(context.encode("utf-8")).hexdigest()[:16] if context else ""
+        raw = f"{model}|{temperature:.2f}|{ctx_hash}|{prompt}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     async def get(self, key: str) -> Optional[Any]:

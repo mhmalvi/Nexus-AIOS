@@ -7,7 +7,7 @@ mod security;
 mod service;
 
 use commands::*;
-use tauri::{Manager, Emitter}; // Added Emitter trait import
+use tauri::{Manager, Emitter, Listener}; // Emitter for emit(), Listener for listen()
 
 /// Initialize the Nexus AIOS
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -96,16 +96,35 @@ pub fn run() {
                 println!("⌨️ Alt+Space global shortcut registered");
             }
 
-            // Auto-start Kernel
+            // Auto-restart listener (M4-4): the crash monitor emits
+            // "kernel:request_restart" with exponential backoff when the kernel
+            // process dies. Wire it to an actual restart so recovery is real
+            // (previously this event had no listener — false resilience).
+            let pm_restart = orchestrator.process_manager.clone();
+            let restart_handle = app.handle().clone();
+            app.handle().listen("kernel:request_restart", move |_event| {
+                let pm = pm_restart.clone();
+                let h = restart_handle.clone();
+                std::thread::spawn(move || {
+                    if let Ok(mut pm) = pm.lock() {
+                        println!("🔄 Crash recovery: restarting Nexus Kernel...");
+                        if let Err(e) = pm.start_kernel(h) {
+                            println!("❌ Kernel restart failed: {}", e);
+                        }
+                    }
+                });
+            });
+
+            // Auto-start Kernel WITH crash recovery (spawns the crash monitor).
             let pm_clone = orchestrator.process_manager.clone();
             let handle_clone = app.handle().clone();
             std::thread::spawn(move || {
                 // Wait a moment for UI to be ready
                 std::thread::sleep(std::time::Duration::from_millis(1000));
-                
+
                 if let Ok(mut pm) = pm_clone.lock() {
-                     println!("🚀 Auto-starting Nexus Kernel...");
-                     if let Err(e) = pm.start_kernel(handle_clone) {
+                     println!("🚀 Auto-starting Nexus Kernel (with crash recovery)...");
+                     if let Err(e) = pm.start_with_recovery(handle_clone) {
                          println!("❌ Failed to auto-start kernel: {}", e);
                      }
                 }

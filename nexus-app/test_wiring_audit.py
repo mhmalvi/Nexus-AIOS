@@ -8,7 +8,7 @@ wired, these tests will catch it.
 
 Coverage:
   - Phase 2: QueryCache, RuntimeConfig
-  - Phase 5: SkillLoader, DockerSandbox, OpenClawClient
+  - Phase 5: SkillLoader, DockerSandbox, AsyncBridgeClient
   - Phase 6: NPUAccelerator, FederatedLearner  
   - Core: Brain, Memory, Toolbox, Supervisor, Agents
 """
@@ -62,8 +62,8 @@ class TestImportWiring:
     def test_docker_sandbox_imported(self):
         assert "DockerSandbox" in self.source, "DockerSandbox not imported in main.py"
 
-    def test_openclaw_client_imported(self):
-        assert "OpenClawClient" in self.source, "OpenClawClient not imported in main.py"
+    def test_async_bridge_imported(self):
+        assert "AsyncBridgeClient" in self.source, "AsyncBridgeClient not imported in main.py"
 
     # --- Phase 6 Modules ---
     def test_npu_accelerator_imported(self):
@@ -112,8 +112,8 @@ class TestInitWiring:
     def test_sandbox_initialized(self):
         assert "self.sandbox" in self.source, "DockerSandbox not initialized as self.sandbox"
 
-    def test_openclaw_client_initialized(self):
-        assert "self.openclaw_client" in self.source, "OpenClawClient not initialized as self.openclaw_client"
+    def test_async_bridge_initialized(self):
+        assert "self.async_bridge" in self.source, "Async bridge not initialized as self.async_bridge"
 
     # --- Phase 6 ---
     def test_npu_accelerator_initialized(self):
@@ -213,8 +213,8 @@ class TestStatusEndpoint:
     def test_status_reports_sandbox(self):
         assert "sandbox_available" in self.source, "Status endpoint doesn't report sandbox status"
 
-    def test_status_reports_openclaw(self):
-        assert "openclaw_connected" in self.source, "Status endpoint doesn't report OpenClaw status"
+    def test_status_reports_messaging(self):
+        assert "messaging_connected" in self.source, "Status endpoint doesn't report messaging status"
 
 
 class TestSkillsInQueryFlow:
@@ -279,9 +279,9 @@ class TestModuleImportability:
         from skills.semantic_snapshot import build_role_snapshot
         assert build_role_snapshot is not None
 
-    def test_import_openclaw_client(self):
-        from bridge.openclaw_client import OpenClawClient
-        assert OpenClawClient is not None
+    def test_import_async_bridge_client(self):
+        from bridge.async_bridge_client import AsyncBridgeClient
+        assert AsyncBridgeClient is not None
 
     def test_import_clawhub_adapter(self):
         from skills.clawhub_adapter import ClawHubAdapter

@@ -2,7 +2,17 @@
 import React, { useState, useEffect } from "react";
 import { Shield, AlertTriangle, Activity, Lock, Key, Eye, Clock, CheckCircle2, XCircle, ChevronRight, FileText, Terminal, Globe, Zap, ShieldAlert, ShieldCheck, ShieldOff, Skull, RefreshCw, Search, Filter, Network } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { firewallApi } from "../../services/tauriApi";
+import { firewallApi, systemApi } from "../../services/tauriApi";
+
+// Trust model + safety config surfaced from the kernel (see security.trust)
+interface SecurityConfig {
+    access_level: string;
+    origin_tool_profiles: Record<string, string>;
+    require_hil_for_untrusted: boolean;
+}
+const ACCESS_LEVELS = ["user", "admin", "dev"];
+const TOOL_PROFILES = ["minimal", "messaging", "coding", "full"];
+const UNTRUSTED_ORIGINS = ["messaging", "web", "remote_agent"];
 
 interface AuditFinding {
     id: string;
@@ -42,7 +52,7 @@ const SEVERITY_CONFIG = {
 };
 
 export function SecurityCenter() {
-    const [activeTab, setActiveTab] = useState<'audit' | 'activity' | 'tools' | 'destruct' | 'firewall'>('audit');
+    const [activeTab, setActiveTab] = useState<'audit' | 'activity' | 'tools' | 'destruct' | 'firewall' | 'access'>('audit');
     const [findings, setFindings] = useState<AuditFinding[]>([]);
     const [activities, setActivities] = useState<ActivityEntry[]>([]);
     const [toolUsage, setToolUsage] = useState<ToolUsage[]>([]);
@@ -56,6 +66,79 @@ export function SecurityCenter() {
     const [fwRules, setFwRules] = useState<any[]>([]);
     const [newRulePattern, setNewRulePattern] = useState('');
     const [newRuleAction, setNewRuleAction] = useState('deny');
+
+    // Access & Trust State
+    const [sec, setSec] = useState<SecurityConfig>({
+        access_level: 'admin', origin_tool_profiles: {}, require_hil_for_untrusted: true,
+    });
+    const [toggles, setToggles] = useState({
+        require_approval_for_high_risk: true,
+        enable_safety_checker: true,
+        enable_ast_command_audit: true,
+        enable_network_firewall: true,
+    });
+    const [savingSec, setSavingSec] = useState(false);
+    const [secSaved, setSecSaved] = useState(false);
+
+    useEffect(() => {
+        if (activeTab !== 'access') return;
+        (async () => {
+            try {
+                const res = await systemApi.getConfig();
+                const d: any = res?.data || {};
+                if (d.security) {
+                    setSec({
+                        access_level: d.security.access_level || 'admin',
+                        origin_tool_profiles: d.security.origin_tool_profiles || {},
+                        require_hil_for_untrusted: d.security.require_hil_for_untrusted !== false,
+                    });
+                }
+                setToggles({
+                    require_approval_for_high_risk: d.require_approval_for_high_risk !== false,
+                    enable_safety_checker: d.enable_safety_checker !== false,
+                    enable_ast_command_audit: d.enable_ast_command_audit !== false,
+                    enable_network_firewall: d.enable_network_firewall !== false,
+                });
+            } catch (e) {
+                console.error('Failed to load security config', e);
+            }
+        })();
+    }, [activeTab]);
+
+    const [pinSaved, setPinSaved] = useState<string | null>(null);
+    const saveDestructPin = async () => {
+        if (!destructPin) return;
+        try {
+            const { securityModApi } = await import("../../services/tauriApi");
+            const res = await securityModApi.setPin(destructPin);
+            setPinSaved(res.success ? 'PIN set ✓' : (res.error || 'Failed'));
+            if (res.success) setDestructPin('');
+            setTimeout(() => setPinSaved(null), 3000);
+        } catch (e) {
+            setPinSaved('Failed to set PIN');
+        }
+    };
+
+    const saveSecurity = async () => {
+        setSavingSec(true);
+        setSecSaved(false);
+        try {
+            await systemApi.updateConfig({
+                security: {
+                    access_level: sec.access_level,
+                    origin_tool_profiles: sec.origin_tool_profiles,
+                    require_hil_for_untrusted: sec.require_hil_for_untrusted,
+                },
+                ...toggles,
+            });
+            setSecSaved(true);
+            setTimeout(() => setSecSaved(false), 2500);
+        } catch (e) {
+            console.error('Failed to save security config', e);
+        } finally {
+            setSavingSec(false);
+        }
+    };
 
     // Fetch Audit Logs on mount and when switching to activity tab
     useEffect(() => {
@@ -190,6 +273,7 @@ export function SecurityCenter() {
                 <div className="flex-1 p-2 space-y-1">
                     {[
                         { key: 'audit', label: 'Audit Dashboard', icon: ShieldCheck, badge: unresolvedCount },
+                        { key: 'access', label: 'Access & Trust', icon: Key },
                         { key: 'activity', label: 'Activity Log', icon: Activity },
                         { key: 'firewall', label: 'Network Firewall', icon: Network },
                         { key: 'tools', label: 'Tool Usage', icon: Terminal },
@@ -338,6 +422,96 @@ export function SecurityCenter() {
                                     );
                                 })}
                             </div>
+                        </motion.div>
+                    )}
+
+                    {/* Access & Trust Tab */}
+                    {activeTab === 'access' && (
+                        <motion.div key="access" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-5 space-y-5">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-sm font-semibold">Access & Trust</h2>
+                                    <p className="text-[10px] text-muted-foreground max-w-lg">
+                                        Trust is decided by origin: the local CLI/terminal/GUI is trusted (full power),
+                                        inbound messaging & web content are untrusted (restricted + approval). Customize it here.
+                                    </p>
+                                </div>
+                                <motion.button
+                                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                                    onClick={saveSecurity} disabled={savingSec}
+                                    className="px-4 py-2 rounded-xl text-xs font-medium bg-primary/15 hover:bg-primary/25 text-primary transition-colors flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    {savingSec ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                    {savingSec ? 'Saving...' : secSaved ? 'Saved ✓' : 'Save Changes'}
+                                </motion.button>
+                            </div>
+
+                            {/* Access Level */}
+                            <div className="bg-white/[0.03] rounded-xl p-4 border border-border/20">
+                                <h3 className="text-xs font-semibold mb-1 flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-primary" /> Local Access Level</h3>
+                                <p className="text-[10px] text-muted-foreground mb-3">Capabilities granted to you (the local operator). dev/admin = full tools; user = coding tools.</p>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {ACCESS_LEVELS.map(lvl => (
+                                        <button key={lvl} onClick={() => setSec(s => ({ ...s, access_level: lvl }))}
+                                            className={`p-2.5 rounded-xl text-xs font-medium capitalize transition-all border
+                                                ${sec.access_level === lvl ? 'bg-primary/15 text-primary border-primary/30' : 'bg-white/[0.02] text-muted-foreground border-transparent hover:bg-white/5'}`}>
+                                            {lvl}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Untrusted origin profiles */}
+                            <div className="bg-white/[0.03] rounded-xl p-4 border border-border/20">
+                                <h3 className="text-xs font-semibold mb-1 flex items-center gap-2"><Globe className="w-3.5 h-3.5 text-amber-400" /> Untrusted Origin Tool Profiles</h3>
+                                <p className="text-[10px] text-muted-foreground mb-3">Which tools each external/untrusted source may use.</p>
+                                <div className="space-y-2">
+                                    {UNTRUSTED_ORIGINS.map(origin => (
+                                        <div key={origin} className="flex items-center justify-between">
+                                            <span className="text-[11px] capitalize">{origin.replace('_', ' ')}</span>
+                                            <select
+                                                className="bg-black/20 border border-border/30 rounded px-2 py-1 text-[10px] outline-none"
+                                                value={sec.origin_tool_profiles[origin] || (origin === 'web' ? 'minimal' : origin === 'messaging' ? 'messaging' : 'coding')}
+                                                onChange={(e) => setSec(s => ({ ...s, origin_tool_profiles: { ...s.origin_tool_profiles, [origin]: e.target.value } }))}
+                                            >
+                                                {TOOL_PROFILES.map(p => <option key={p} value={p}>{p}</option>)}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Safety toggles */}
+                            <div className="bg-white/[0.03] rounded-xl p-4 border border-border/20 space-y-1">
+                                <h3 className="text-xs font-semibold mb-2 flex items-center gap-2"><ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Safety Subsystems</h3>
+                                {([
+                                    ['require_hil_for_untrusted', 'Approval for untrusted actions', 'Require human approval for state-changing actions from untrusted sources', true],
+                                    ['require_approval_for_high_risk', 'Approval for high-risk actions', 'Require approval before high/critical-risk operations', false],
+                                    ['enable_safety_checker', 'Safety blacklist', 'Block known-dangerous command patterns', false],
+                                    ['enable_ast_command_audit', 'AST command audit', 'Deep structural analysis of shell commands', false],
+                                    ['enable_network_firewall', 'Network firewall', 'Exfiltration detection + egress deny rules', false],
+                                ] as [string, string, string, boolean][]).map(([key, label, desc, isSec]) => {
+                                    const val = isSec ? sec.require_hil_for_untrusted : (toggles as any)[key];
+                                    const toggle = () => isSec
+                                        ? setSec(s => ({ ...s, require_hil_for_untrusted: !s.require_hil_for_untrusted }))
+                                        : setToggles(t => ({ ...t, [key]: !(t as any)[key] }));
+                                    return (
+                                        <div key={key} className="flex items-center justify-between py-2 border-t border-border/10 first:border-t-0">
+                                            <div className="flex-1 pr-3">
+                                                <p className="text-[11px] font-medium">{label}</p>
+                                                <p className="text-[9px] text-muted-foreground">{desc}</p>
+                                            </div>
+                                            <button onClick={toggle}
+                                                className={`w-10 h-5 rounded-full relative transition-colors ${val ? 'bg-primary/40' : 'bg-white/10'}`}>
+                                                <div className={`w-4 h-4 rounded-full absolute top-0.5 transition-transform ${val ? 'right-0.5 bg-primary' : 'left-0.5 bg-muted-foreground/40'}`} />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-[9px] text-muted-foreground/60 flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3" /> Disabling safety subsystems lowers protection against untrusted input — recommended only on trusted, offline dev machines.
+                            </p>
                         </motion.div>
                     )}
 
@@ -551,13 +725,28 @@ export function SecurityCenter() {
                                 <div className="space-y-3">
                                     <div>
                                         <label className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5 block">Self-Destruct PIN</label>
-                                        <input
-                                            type="password"
-                                            value={destructPin}
-                                            onChange={e => setDestructPin(e.target.value)}
-                                            placeholder="Set 4-8 digit PIN"
-                                            className="w-full bg-white/5 border border-border/30 rounded-xl px-4 py-2.5 text-sm placeholder-muted-foreground/50 focus:outline-none focus:border-red-500/50 transition-colors font-mono"
-                                        />
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="password"
+                                                value={destructPin}
+                                                onChange={e => setDestructPin(e.target.value)}
+                                                placeholder="Set 4+ char PIN (salted PBKDF2)"
+                                                className="flex-1 bg-white/5 border border-border/30 rounded-xl px-4 py-2.5 text-sm placeholder-muted-foreground/50 focus:outline-none focus:border-red-500/50 transition-colors font-mono"
+                                            />
+                                            <button
+                                                onClick={saveDestructPin}
+                                                disabled={destructPin.length < 4}
+                                                className="px-4 rounded-xl text-xs font-bold bg-red-500/15 hover:bg-red-500/25 text-red-400 transition-colors disabled:opacity-40"
+                                            >
+                                                Set PIN
+                                            </button>
+                                        </div>
+                                        {pinSaved && <p className="text-[10px] text-emerald-400 mt-1.5">{pinSaved}</p>}
+                                        <p className="text-[9px] text-muted-foreground/70 mt-1.5">
+                                            Data Wipe & Full Destruct also require typing the phrase
+                                            <span className="font-mono text-red-400"> CONFIRM DATA_WIPE</span> /
+                                            <span className="font-mono text-red-400"> CONFIRM FULL_DESTRUCT</span>. Without a PIN, destructive levels are disabled.
+                                        </p>
                                     </div>
                                     <div className="flex items-center justify-between py-2 border-t border-border/10">
                                         <div>

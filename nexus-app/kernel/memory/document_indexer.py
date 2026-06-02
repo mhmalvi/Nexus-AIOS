@@ -15,7 +15,7 @@ import logging
 import mimetypes
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
@@ -273,7 +273,7 @@ class DocumentIndexer:
             "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
             "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             "document_type": self._get_document_type(file_path).value,
-            "indexed_at": datetime.utcnow().isoformat()
+            "indexed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         }
     
     async def index_file(self, file_path: str) -> IndexResult:
@@ -372,18 +372,12 @@ class DocumentIndexer:
     async def _delete_document_chunks(self, document_id: str):
         """Delete existing chunks for a document."""
         try:
-            # Search for chunks with this document_id
-            results = await self.store.search(
-                query="*",
-                table_name=self.table_name,
-                limit=1000,
-                use_hybrid=False
-            )
-            
-            for r in results:
+            # Real scan (no meaningless "*" embedding), then delete matches by id.
+            rows = await self.store.list_rows(self.table_name, limit=10000)
+            for r in rows:
                 if r.get("metadata", {}).get("document_id") == document_id:
                     await self.store.delete(r["id"], self.table_name)
-                    
+
         except Exception as e:
             logger.debug(f"Could not delete existing chunks: {e}")
     
@@ -473,13 +467,8 @@ class DocumentIndexer:
     async def get_indexed_documents(self) -> List[Dict[str, Any]]:
         """Get list of indexed documents with metadata."""
         try:
-            results = await self.store.search(
-                query="*",
-                table_name=self.table_name,
-                limit=10000,
-                use_hybrid=False
-            )
-            
+            results = await self.store.list_rows(self.table_name, limit=10000)
+
             # Group by document_id
             documents = {}
             for r in results:

@@ -5,7 +5,7 @@ When conversation history grows too large for the model's context window,
 this engine compresses older messages into summaries while preserving
 essential information.
 
-Inspired by OpenClaw's compaction.ts — ported to Python with AETHER enhancements.
+Inspired by open-source agent frameworks; ported to Python with AETHER enhancements.
 """
 
 import asyncio

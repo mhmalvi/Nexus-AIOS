@@ -2,7 +2,7 @@
 AETHER Subagent Registry — Multi-Agent Orchestration Engine
 
 Manages child agent sessions for parallel task execution.
-Inspired by OpenClaw's subagent-registry.ts.
+Inspired by open-source agent frameworks.
 
 Features:
 - Spawn isolated child agent sessions

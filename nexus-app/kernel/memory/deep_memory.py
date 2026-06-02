@@ -26,6 +26,7 @@ import json
 import logging
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
@@ -165,6 +166,12 @@ class DeepMemory:
         # Optional brain reference for LLM-assisted extraction
         self._brain_ref = None
 
+        # Persistence deferral — during a batch, suppress the per-mutation
+        # full-file rewrite (which made batch_ingest O(n²) I/O, F-NEW-5) and
+        # flush once at the end. _dirty tracks whether a write is pending.
+        self._persist_suspended = False
+        self._dirty = False
+
         if persist_path:
             self._persist_path = Path(persist_path)
         else:
@@ -217,7 +224,10 @@ class DeepMemory:
         }
         total = len(items)
 
-        for idx, item in enumerate(items):
+        # Defer persistence: one disk write for the whole batch, not one per
+        # entity/edge (F-NEW-5). The context manager flushes on exit.
+        with self.deferred_persist():
+          for idx, item in enumerate(items):
             try:
                 name = item.get("name", "")
                 if not name:
@@ -302,8 +312,9 @@ class DeepMemory:
                 except Exception:
                     pass
 
-        # Persist after batch
-        self._persist()
+        # The deferred_persist context already flushed once on exit; this is a
+        # no-op unless something is still dirty.
+        self.flush()
         logger.info(
             "Batch ingest complete: %d added, %d reinforced, %d edges, %d errors",
             stats["entities_added"], stats["entities_reinforced"],
@@ -712,6 +723,11 @@ class DeepMemory:
     # ------------------------------------------------------------------
 
     def _persist(self) -> None:
+        # If a batch is in progress, mark dirty and defer the actual write so
+        # n mutations cost ONE write at flush time instead of n (F-NEW-5).
+        if self._persist_suspended:
+            self._dirty = True
+            return
         try:
             self._persist_path.parent.mkdir(parents=True, exist_ok=True)
             data = {
@@ -721,8 +737,30 @@ class DeepMemory:
             tmp = self._persist_path.with_suffix(".tmp")
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.replace(self._persist_path)
+            self._dirty = False
         except Exception as e:
             logger.warning("Failed to persist deep memory: %s", e)
+
+    @contextmanager
+    def deferred_persist(self):
+        """Context manager that batches persistence: per-mutation writes are
+        suppressed inside the block and a single write happens on exit (if any
+        mutation occurred). Safe to nest."""
+        outer = self._persist_suspended
+        self._persist_suspended = True
+        try:
+            yield
+        finally:
+            if not outer:
+                # Outermost block — resume and flush once if anything changed.
+                self._persist_suspended = False
+                if self._dirty:
+                    self._persist()
+
+    def flush(self) -> None:
+        """Force a pending deferred write to disk."""
+        if self._dirty and not self._persist_suspended:
+            self._persist()
 
     def _restore(self) -> None:
         if not self._persist_path.exists():

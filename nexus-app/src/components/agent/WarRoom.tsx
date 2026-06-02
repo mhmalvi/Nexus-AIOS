@@ -473,9 +473,9 @@ export function WarRoom() {
                             </button>
 
                             <button onClick={() => openWindow('messaging')} className="glass-panel bg-green-950/20 border border-green-500/30 rounded-xl p-3 flex flex-col items-center justify-center text-center hover:ring-1 hover:ring-green-400/50 transition-all">
-                                <Globe className={`w-5 h-5 mb-2 ${kernelInfo?.openclaw_connected ? 'text-green-400' : 'text-zinc-600'}`} />
-                                <div className="text-[10px] font-bold text-green-100">OPENCLAW</div>
-                                <div className="text-[9px] text-green-500/70">{kernelInfo?.openclaw_connected ? 'CONNECTED' : 'DISCONNECTED'}</div>
+                                <Globe className={`w-5 h-5 mb-2 ${kernelInfo?.messaging_connected ? 'text-green-400' : 'text-zinc-600'}`} />
+                                <div className="text-[10px] font-bold text-green-100">MESSAGING</div>
+                                <div className="text-[9px] text-green-500/70">{kernelInfo?.messaging_connected ? 'CONNECTED' : 'DISCONNECTED'}</div>
                                 <div className="text-[8px] text-green-400/50 mt-1">Messaging ›</div>
                             </button>
                         </div>

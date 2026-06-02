@@ -4,7 +4,7 @@ import { Activity, Cpu, HardDrive, Brain, GitBranch, Wifi, Clock } from "lucide-
 import { useStore } from "../../context/StoreContext";
 import { kernelApi, systemApi } from "../../services/tauriApi";
 import { useModelConfig, modelConfig, effectiveModel, providerLabel } from "../../services/modelConfig";
-import { mockTauri } from "../../services/mockTauri";
+import { kernelEventBus } from "../../services/kernelEventBus";
 import { STATUS_BAR_HEIGHT } from "../../services/WindowBounds";
 
 interface SystemTelemetry {
@@ -58,7 +58,7 @@ export function StatusBar() {
     const [kernelStatus, setKernelStatus] = useState<'stopped' | 'starting' | 'running' | 'error'>('stopped');
     const [kernelPid, setKernelPid] = useState<number | null>(null);
     const mc = useModelConfig();
-    const [openClawConnected, setOpenClawConnected] = useState(false);
+    const [messagingConnected, setMessagingConnected] = useState(false);
     const [voiceActive, setVoiceActive] = useState(false);
     const [npuActive, setNpuActive] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -75,7 +75,7 @@ export function StatusBar() {
     // Real-time telemetry polling
     useEffect(() => {
         // Subscribe to kernel responses for system stats
-        const unsub = mockTauri.subscribeResponse((msg) => {
+        const unsub = kernelEventBus.subscribeResponse((msg) => {
             if (msg.message_type === 'system_stats' && msg.data) {
                 setTelemetry(prev => ({
                     ...prev,
@@ -94,7 +94,7 @@ export function StatusBar() {
                 const status = await kernelApi.getStatus();
                 setKernelStatus(status.status as any);
                 setKernelPid(status.process_id || null);
-                setOpenClawConnected(!!status.openclaw_connected);
+                setMessagingConnected(!!status.messaging_connected);
                 setVoiceActive(!!status.voice_enabled);
                 setNpuActive(!!status.npu_available);
 
@@ -182,7 +182,7 @@ export function StatusBar() {
 
                 {/* Status Indicators */}
                 <div className="flex gap-2">
-                    <span title="OpenClaw" className={`font-bold ${openClawConnected ? 'text-blue-400' : 'text-muted-foreground/30'}`}>OC</span>
+                    <span title="Messaging" className={`font-bold ${messagingConnected ? 'text-blue-400' : 'text-muted-foreground/30'}`}>MSG</span>
                     <span title="Voice Engine" className={`font-bold ${voiceActive ? 'text-green-400' : 'text-muted-foreground/30'}`}>VC</span>
                     <span title="Neural Processing Unit" className={`font-bold ${npuActive ? 'text-purple-400' : 'text-muted-foreground/30'}`}>NPU</span>
                 </div>

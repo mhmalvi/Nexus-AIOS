@@ -73,10 +73,15 @@ echo -e "\n${YELLOW}[1/8] Creating nexus system user...${NC}"
 if id "${NEXUS_USER}" &>/dev/null; then
     echo "   User '${NEXUS_USER}' already exists"
 else
-    useradd -r -m -d ${NEXUS_HOME} -s /bin/bash -G wheel,video,render ${NEXUS_USER} 2>/dev/null || \
+    # Service account: NOT in 'wheel' (no sudo). Only video/render for GPU.
+    # The hardened systemd unit (NoNewPrivileges, ProtectSystem=strict) runs it.
+    useradd -r -m -d ${NEXUS_HOME} -s /bin/bash -G video,render ${NEXUS_USER} 2>/dev/null || \
     useradd -r -m -d ${NEXUS_HOME} -s /bin/bash ${NEXUS_USER}
-    echo "nexus:nexus" | chpasswd
-    echo "   ✅ User '${NEXUS_USER}' created (password: nexus)"
+    # No default password. Lock the account's password and force the operator to
+    # set one on first interactive login (no shipped default credentials, F5).
+    passwd -l "${NEXUS_USER}" &>/dev/null || true
+    chage -d 0 "${NEXUS_USER}" &>/dev/null || true
+    echo "   ✅ User '${NEXUS_USER}' created (locked; no default password, no sudo)"
 fi
 
 # ─── Step 2: System Dependencies ─────────────────────────────────
@@ -124,8 +129,27 @@ echo "   ✅ System dependencies installed"
 echo -e "\n${YELLOW}[3/8] Checking Ollama LLM runtime...${NC}"
 if ! command -v ollama &>/dev/null; then
     echo "   Installing Ollama..."
-    curl -fsSL https://ollama.com/install.sh | sh
-    echo "   ✅ Ollama installed"
+    # Do NOT pipe the network straight into a shell (F5/F10). Prefer the distro
+    # package; otherwise download the script to a file, optionally verify a
+    # pinned SHA-256, show provenance, and only then run it.
+    if [ "$PKG_MGR" = "pacman" ] && pacman -Si ollama &>/dev/null; then
+        pacman -S --noconfirm --needed ollama && echo "   ✅ Ollama installed from distro package"
+    else
+        OLLAMA_TMP="$(mktemp /tmp/ollama-install.XXXXXX.sh)"
+        if curl -fsSL https://ollama.com/install.sh -o "$OLLAMA_TMP"; then
+            if [ -n "${OLLAMA_INSTALL_SHA256:-}" ]; then
+                echo "${OLLAMA_INSTALL_SHA256}  ${OLLAMA_TMP}" | sha256sum -c - \
+                    || { echo -e "${RED}❌ Ollama installer checksum mismatch — aborting${NC}"; rm -f "$OLLAMA_TMP"; exit 1; }
+            else
+                echo -e "   ${YELLOW}⚠️ OLLAMA_INSTALL_SHA256 not set — running unverified installer from ollama.com${NC}"
+                echo "   Review it: $OLLAMA_TMP"
+            fi
+            sh "$OLLAMA_TMP" && echo "   ✅ Ollama installed"
+            rm -f "$OLLAMA_TMP"
+        else
+            echo -e "${RED}❌ Failed to download Ollama installer${NC}"
+        fi
+    fi
 else
     echo "   ✅ Ollama already installed"
 fi
@@ -330,5 +354,6 @@ echo "    sudo systemctl start nexus-core    # Start the AI"
 echo "    nexus-cli                           # Chat with Nexus"
 echo "    curl http://localhost:9600/health   # API health check"
 echo ""
-echo "  Login: nexus / nexus"
+echo "  Service account: '${NEXUS_USER}' (locked, no sudo). To enable an"
+echo "  interactive login, set a password:  sudo passwd ${NEXUS_USER}"
 echo -e "${NC}"

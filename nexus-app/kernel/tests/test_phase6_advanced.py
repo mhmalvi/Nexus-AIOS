@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Add kernel to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'kernel'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from hardware.federated_learner import GradientTransport, GradientUpdate, PeerInfo
 from hardware.npu_accelerator import NPUAccelerator, AcceleratorType
