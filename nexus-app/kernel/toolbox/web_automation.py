@@ -5,7 +5,14 @@ Handles web requests and browser automation
 
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
+import asyncio
+import ipaddress
+import logging
+import socket
+from urllib.parse import urlparse
 import aiohttp
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -18,6 +25,21 @@ class WebResult:
     headers: Dict[str, str] = None
 
 
+def _ip_is_blocked(ip_str: str) -> bool:
+    """True if an IP is loopback / link-local / private / reserved / multicast.
+
+    169.254.169.254 (cloud metadata) is link-local and therefore blocked.
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return (
+        ip.is_loopback or ip.is_link_local or ip.is_private
+        or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+    )
+
+
 class WebAutomation:
     """
     Web Automation - HTTP requests and browser control
@@ -28,11 +50,61 @@ class WebAutomation:
     - Download management
     """
     
-    def __init__(self, timeout: int = 30):
+    def __init__(self, timeout: int = 30, firewall=None, allow_private: bool = False):
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.default_headers = {
             "User-Agent": "Nexus-AIOS/1.0"
         }
+        # Optional NetworkFirewall (exfil detection + explicit deny rules).
+        self.firewall = firewall
+        # SSRF guard: block requests to loopback/link-local/private/metadata
+        # endpoints unless explicitly opted in (F-NEW-2). Default-secure.
+        self.allow_private = allow_private
+
+    async def _guard(self, url: str, method: str = "GET") -> Optional[WebResult]:
+        """Pre-flight egress checks. Returns a blocking WebResult or None."""
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if not host:
+            return WebResult(success=False, output=None, error=f"Invalid URL: {url}")
+
+        # SSRF guard — resolve the host and refuse internal targets.
+        if not self.allow_private:
+            try:
+                loop = asyncio.get_event_loop()
+                infos = await loop.run_in_executor(
+                    None, lambda: socket.getaddrinfo(host, parsed.port or None)
+                )
+                addresses = {info[4][0] for info in infos}
+            except Exception:
+                # If the literal host is itself an IP, check it directly.
+                addresses = {host}
+            for addr in addresses:
+                if _ip_is_blocked(addr):
+                    logger.warning("Blocked SSRF egress to %s (%s)", url, addr)
+                    return WebResult(
+                        success=False, output=None,
+                        error=f"Blocked: request to internal/loopback/link-local address ({addr})",
+                    )
+
+        # NetworkFirewall — exfil patterns + explicit deny rules.
+        if self.firewall is not None:
+            try:
+                verdict = await self.firewall.check(url, method=method)
+                v = getattr(verdict, "value", str(verdict))
+                # Treat the firewall as a deny-list for general browsing: block
+                # exfil patterns and explicit DENY rules. The default-DENY
+                # fallthrough ("denied") is NOT enforced here so legitimate web
+                # research isn't broken; the SSRF guard above covers internal
+                # targets regardless.
+                if v in ("blocked_exfiltration", "blocked_by_rule"):
+                    return WebResult(
+                        success=False, output=None,
+                        error=f"Blocked by network firewall: {v}",
+                    )
+            except Exception as e:
+                logger.debug("Firewall check error (allowing): %s", e)
+        return None
     
     async def request(
         self,
@@ -44,8 +116,12 @@ class WebAutomation:
     ) -> WebResult:
         """Make an HTTP request"""
         
+        blocked = await self._guard(url, method)
+        if blocked is not None:
+            return blocked
+
         request_headers = {**self.default_headers, **(headers or {})}
-        
+
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.request(
@@ -101,8 +177,12 @@ class WebAutomation:
     ) -> WebResult:
         """Download a file"""
         
+        blocked = await self._guard(url, "GET")
+        if blocked is not None:
+            return blocked
+
         request_headers = {**self.default_headers, **(headers or {})}
-        
+
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(url, headers=request_headers) as response:

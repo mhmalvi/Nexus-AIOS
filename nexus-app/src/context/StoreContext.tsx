@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { AppState, ThoughtEvent, ActionRequest, Message, UISettings, Artifact, WindowState, Notification, Toast, Agent, VoiceSettings, Asset, Conversation } from '../types';
 import { getCenterPosition, getCascadePosition, clampWindowPosition, clampWindowSize, getSafeWorkArea, HEADER_HEIGHT, DOCK_HEIGHT, STATUS_BAR_HEIGHT } from '../services/WindowBounds';
-import { mockTauri } from '../services/mockTauri';
+import { kernelEventBus } from '../services/kernelEventBus';
 
 interface StoreContextType extends AppState {
   setTheme: (theme: AppState['ui']['theme']) => void;
@@ -610,7 +610,7 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
   }, [state.agent.isListening]);
 
   useEffect(() => {
-    const unsub = mockTauri.subscribeOpenClaw((msg) => {
+    const unsub = kernelEventBus.subscribeAsyncMessage((msg) => {
       dispatch({
         type: 'ADD_NOTIFICATION',
         payload: {
@@ -689,89 +689,21 @@ export function StoreProvider({ children }: { children?: ReactNode }) {
     setError: (isError: boolean) => dispatch({ type: 'SET_ERROR', payload: isError }),
     toggleReaction: (messageId: string, reaction: string) => dispatch({ type: 'TOGGLE_REACTION', payload: { messageId, reaction } }),
     startListening: () => {
+      // Single mic owner: the kernel's Whisper pipeline. We previously also ran
+      // the browser's webkitSpeechRecognition here, which (a) raced the kernel
+      // for the same microphone device — overlapping PortAudio capture/playback
+      // crashes the kernel — and (b) never actually forwarded its transcript for
+      // an AI response. The kernel listen is dispatched by the `isListening`
+      // effect, and the kernel emits transcript/voice_status events back.
       dispatch({ type: 'START_LISTENING' });
-
-      // Frontend-first Hybrid Voice Strategy
-      if ('webkitSpeechRecognition' in window) {
-        // @ts-ignore - TypeScript doesn't know about webkitSpeechRecognition by default
-        const recognition = new window.webkitSpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-
-        recognition.onstart = () => {
-          dispatch({
-            type: 'ADD_THOUGHT', payload: {
-              id: `voice-init-${Date.now()}`,
-              timestamp: new Date(),
-              type: 'action',
-              component: 'supervisor',
-              content: 'Voice: Local sensor active.'
-            }
-          });
-        };
-
-        recognition.onresult = (event: any) => {
-          let interimTranscript = '';
-          let finalTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            } else {
-              interimTranscript += event.results[i][0].transcript;
-            }
-          }
-
-          if (interimTranscript) dispatch({ type: 'SET_TRANSCRIPT', payload: interimTranscript });
-          if (finalTranscript) {
-            dispatch({ type: 'SET_TRANSCRIPT', payload: finalTranscript });
-            dispatch({
-              type: 'ADD_MESSAGE',
-              payload: {
-                id: Date.now().toString(),
-                role: 'user',
-                content: finalTranscript,
-                timestamp: new Date()
-              }
-            });
-            // Send to backend as text query
-            dispatch({ type: 'STOP_LISTENING' });
-          }
-        };
-
-        recognition.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
-          dispatch({ type: 'STOP_LISTENING' });
-          dispatch({
-            type: 'ADD_NOTIFICATION',
-            payload: {
-              id: Date.now().toString(),
-              type: 'error',
-              title: 'Voice Input Failed',
-              message: `Error: ${event.error || 'Unknown error'}. Check microphone permissions.`,
-              read: false,
-              timestamp: new Date()
-            }
-          });
-        };
-
-        recognition.onend = () => {
-          dispatch({ type: 'STOP_LISTENING' });
-        };
-
-        recognition.start();
-      } else {
-        // Fallback to backend if browser API missing (rare)
-        import('../services/tauriApi').then(({ default: tauriApi }) => {
-          tauriApi.kernel.send(JSON.stringify({ action: "listen" }), 'voice');
-        });
-      }
     },
     stopListening: () => {
       dispatch({ type: 'STOP_LISTENING' });
-      // Stop logic is largely handled by the recognition object's auto-stop or onend, 
-      // but we ensure state is cleared.
+      // Tell the kernel to stop any in-flight capture (best-effort; harmless if
+      // it's already idle).
+      import('../services/tauriApi').then(({ default: tauriApi }) => {
+        tauriApi.kernel.send(JSON.stringify({ action: "stop_listen" }), 'voice').catch(() => {});
+      });
     },
     setTranscript: (text: string) => dispatch({ type: 'SET_TRANSCRIPT', payload: text }),
     addThought: (thought: ThoughtEvent) => dispatch({ type: 'ADD_THOUGHT', payload: { ...thought, timestamp: new Date(thought.timestamp) } }),

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Puzzle, RefreshCw, Power, PowerOff, RotateCcw, Shield, AlertTriangle, CheckCircle2, XCircle, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { pluginApi } from "../../services/tauriApi";
+import { pluginApi, KernelResponse } from "../../services/tauriApi";
 
 interface PluginInfo {
     name: string;
@@ -28,6 +28,8 @@ export function PluginManager() {
     const [searchQuery, setSearchQuery] = useState('');
     const [systemStats, setSystemStats] = useState<{ total: number; loaded: number; errored: number }>({ total: 0, loaded: 0, errored: 0 });
     const [error, setError] = useState<string | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [pluginsDir, setPluginsDir] = useState<string>('');
 
     const fetchPlugins = async () => {
         setLoading(true);
@@ -41,6 +43,7 @@ export function PluginManager() {
                     loaded: res.data.loaded || 0,
                     errored: res.data.errored || 0,
                 });
+                if (res.data.plugins_dir) setPluginsDir(res.data.plugins_dir);
             } else if (res?.error) {
                 setError(res.error);
             }
@@ -54,35 +57,30 @@ export function PluginManager() {
 
     useEffect(() => { fetchPlugins(); }, []);
 
-    const handleEnable = async (name: string) => {
+    // Run a plugin action and surface failures instead of swallowing them.
+    const runAction = async (
+        name: string,
+        verb: string,
+        fn: (n: string) => Promise<KernelResponse>,
+    ) => {
         setActionLoading(name);
+        setActionError(null);
         try {
-            await pluginApi.enable(name);
-            await fetchPlugins();
+            const res = await fn(name);
+            if (res && res.success === false) {
+                setActionError(`Failed to ${verb} "${name}": ${res.error || 'unknown error'}`);
+            }
+        } catch (e) {
+            setActionError(`Failed to ${verb} "${name}": ${e instanceof Error ? e.message : String(e)}`);
         } finally {
+            await fetchPlugins();
             setActionLoading(null);
         }
     };
 
-    const handleDisable = async (name: string) => {
-        setActionLoading(name);
-        try {
-            await pluginApi.disable(name);
-            await fetchPlugins();
-        } finally {
-            setActionLoading(null);
-        }
-    };
-
-    const handleReload = async (name: string) => {
-        setActionLoading(name);
-        try {
-            await pluginApi.reload(name);
-            await fetchPlugins();
-        } finally {
-            setActionLoading(null);
-        }
-    };
+    const handleEnable = (name: string) => runAction(name, 'enable', pluginApi.enable);
+    const handleDisable = (name: string) => runAction(name, 'disable', pluginApi.disable);
+    const handleReload = (name: string) => runAction(name, 'reload', pluginApi.reload);
 
     const isActive = (state: string) => state === 'running' || state === 'initialized';
 
@@ -149,6 +147,14 @@ export function PluginManager() {
                     <span className="text-[10px] text-muted-foreground">{filtered.length} plugin{filtered.length !== 1 ? 's' : ''}</span>
                 </div>
 
+                {actionError && (
+                    <div className="flex items-start gap-2 mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500">
+                        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        <span className="text-[10px] flex-1">{actionError}</span>
+                        <button onClick={() => setActionError(null)} className="text-[10px] opacity-60 hover:opacity-100">✕</button>
+                    </div>
+                )}
+
                 {loading && (
                     <div className="flex items-center justify-center py-12 text-muted-foreground">
                         <RefreshCw className="w-5 h-5 animate-spin mr-2" />
@@ -168,7 +174,11 @@ export function PluginManager() {
                     <div className="text-center py-12 text-muted-foreground">
                         <Puzzle className="w-10 h-10 mx-auto mb-3 opacity-20" />
                         <p className="text-sm">No plugins found.</p>
-                        <p className="text-[10px] opacity-60 mt-1">Add plugins to the kernel/plugins directory.</p>
+                        <p className="text-[10px] opacity-60 mt-1">Drop a plugin folder into:</p>
+                        <code className="inline-block mt-1 px-2 py-1 rounded bg-muted/50 text-[9px] font-mono text-foreground/70">
+                            {pluginsDir || 'kernel/plugins'}
+                        </code>
+                        <p className="text-[9px] opacity-50 mt-2">then click Refresh to discover it.</p>
                     </div>
                 )}
 

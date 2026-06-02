@@ -16,7 +16,7 @@ import logging
 import uuid
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from collections import Counter
 
@@ -41,8 +41,8 @@ class LearningEntry:
     value: Any                                # The learned value/action
     confidence: float = 0.5                   # Confidence in this learning
     frequency: int = 1                        # How often this was observed
-    last_used: datetime = field(default_factory=datetime.utcnow)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    last_used: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -69,7 +69,7 @@ class ActionRecord:
     args: Dict[str, Any]                      # Tool arguments
     result: str                               # Action result
     approved: bool = True                     # Was it approved
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     correction: Optional[str] = None         # Any correction applied
     user_feedback: Optional[str] = None      # User feedback if any
 
@@ -153,13 +153,11 @@ class SelfLearningEngine:
     async def _load_patterns(self):
         """Load existing patterns from storage."""
         try:
-            results = await self.store.search(
-                query="*",
-                table_name=self.TABLE_PATTERNS,
+            results = await self.store.list_rows(
+                self.TABLE_PATTERNS,
                 limit=self.max_entries,
-                use_hybrid=False
             )
-            
+
             for r in results:
                 metadata = r.get("metadata", {})
                 entry = LearningEntry(
@@ -179,13 +177,11 @@ class SelfLearningEngine:
     async def _load_preferences(self):
         """Load existing preferences from storage."""
         try:
-            results = await self.store.search(
-                query="*",
-                table_name=self.TABLE_PREFERENCES,
+            results = await self.store.list_rows(
+                self.TABLE_PREFERENCES,
                 limit=1000,
-                use_hybrid=False
             )
-            
+
             for r in results:
                 key = r.get("metadata", {}).get("key", "")
                 value = r.get("metadata", {}).get("value")
@@ -230,7 +226,7 @@ class SelfLearningEngine:
             if pattern_key in self._patterns:
                 entry = self._patterns[pattern_key]
                 entry.frequency += 1
-                entry.last_used = datetime.utcnow()
+                entry.last_used = datetime.now(timezone.utc).replace(tzinfo=None)
                 # Increase confidence with frequency
                 entry.confidence = min(
                     self.CONFIDENCE_HIGH,
@@ -335,7 +331,7 @@ class SelfLearningEngine:
                         "key": key,
                         "value": value,
                         "source": source,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                     },
                     table_name=self.TABLE_PREFERENCES
                 )

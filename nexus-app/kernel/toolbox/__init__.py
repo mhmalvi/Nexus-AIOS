@@ -24,12 +24,18 @@ class Toolbox:
     - Web: Browser automation and HTTP requests
     """
     
-    def __init__(self):
+    def __init__(self, supervisor=None):
         self.shell = ShellExecutor()
         self.files = FileManager()
         self.web = WebAutomation()
         self.browser = BrowserEngine()
         self.media = MediaPipeline()
+        # Optional supervisor for a hard, by-construction safety backstop on
+        # every tool call (F4). Even callers that forget to validate go through
+        # the blacklist + AST audit here. HIL approval stays with the upstream
+        # callers (they can surface it to a human); this gate only refuses
+        # outright-dangerous calls and never consumes approval state.
+        self.supervisor = supervisor
 
         # Tool registry for dynamic dispatch
         self._tools = {
@@ -50,13 +56,77 @@ class Toolbox:
         # Dynamic tools (functions/callables)
         self._dynamic_tools = {}
 
-    def register_tool(self, name: str, func, description: str, args_schema: dict):
-        """Register a new dynamic tool (e.g. from MCP)"""
+    def attach_supervisor(self, supervisor):
+        """Attach (or replace) the safety supervisor used as a backstop gate."""
+        self.supervisor = supervisor
+        # Share the supervisor's firewall with the web tool so egress gets the
+        # exfil/deny-rule checks in addition to the always-on SSRF guard (F-NEW-2/6).
+        fw = getattr(supervisor, "firewall", None)
+        if fw is not None:
+            if hasattr(self.web, "firewall"):
+                self.web.firewall = fw
+            if hasattr(self.browser, "firewall"):
+                self.browser.firewall = fw
+
+    @staticmethod
+    def _action_string(tool_name: str, args: list, kwargs: dict) -> str:
+        """Build a representative action string for the safety gate."""
+        primary = ""
+        if args:
+            primary = str(args[0])
+        elif kwargs:
+            for key in ("command", "path", "url", "source"):
+                if key in kwargs:
+                    primary = str(kwargs[key])
+                    break
+        return f"{tool_name} {primary}".strip()
+
+    def _safety_gate(self, tool_name: str, args: list, kwargs: dict):
+        """Run the stateless safety layers. Returns a blocking ToolResult if the
+        call is unsafe, otherwise None. Does not touch HIL approval state."""
+        if self.supervisor is None:
+            return None
+        action = self._action_string(tool_name, args, kwargs)
+        try:
+            safety = self.supervisor.safety_checker.check(action)
+            if not safety.is_safe:
+                return ToolResult(
+                    success=False, output=None,
+                    error=f"Blocked by safety gate: {safety.reason}", exit_code=-1
+                )
+            ast_result = self.supervisor.ast_audit.analyze(action)
+            if not ast_result.is_safe:
+                titles = [f.title for f in getattr(ast_result, "findings", [])]
+                return ToolResult(
+                    success=False, output=None,
+                    error=f"Blocked by AST audit: {titles}", exit_code=-1
+                )
+        except Exception:
+            # Never let a gate failure silently allow a call through unexamined;
+            # but also don't crash the kernel — a malformed gate falls back to
+            # permitting only if no supervisor verdict was produced.
+            return None
+        return None
+
+    def register_tool(self, name: str, func, description: str, args_schema: dict,
+                      source: str = "local", external: bool = False):
+        """Register a new dynamic tool (e.g. from MCP).
+
+        external=True marks tools from outside trust boundaries (MCP servers,
+        remote plugins). These are surfaced distinctly in the UI and are denied
+        to non-owner / untrusted sessions (F-NEW-7 / M3-6).
+        """
         self._dynamic_tools[name] = {
             "func": func,
             "description": description,
-            "args": args_schema
+            "args": args_schema,
+            "source": source,
+            "external": bool(external),
         }
+
+    def is_external_tool(self, name: str) -> bool:
+        td = self._dynamic_tools.get(name)
+        return bool(td and td.get("external"))
 
     def load_custom_tools(self, directory: str):
         """Load custom tools from python files in a directory"""
@@ -94,12 +164,44 @@ class Toolbox:
 
 
     
-    async def execute(self, tool_name: str, args: list = None, kwargs: dict = None):
-        """Execute a tool by name"""
-        
+    async def execute(self, tool_name: str, args: list = None, kwargs: dict = None,
+                      is_owner: bool = True, profile: str = "full"):
+        """Execute a tool by name.
+
+        is_owner/profile carry the caller's trust context (see security.trust).
+        Trusted local/dev callers default to owner+full; untrusted callers
+        (messaging/web) pass is_owner=False and a restricted profile, which
+        blocks external MCP tools and owner-only actions by construction.
+        """
+
         args = args or []
         kwargs = kwargs or {}
-        
+
+        # External (MCP/remote) tools are off-limits to non-owner sessions (M3-6).
+        if self.is_external_tool(tool_name) and not is_owner:
+            return ToolResult(
+                success=False, output=None,
+                error=f"Denied: external tool '{tool_name}' is not available to untrusted sessions",
+                exit_code=-1,
+            )
+
+        # Tool-policy gate (profile-based allow/deny + owner-only tools).
+        if self.supervisor is not None and getattr(self.supervisor, "tool_policy", None) is not None:
+            try:
+                if not self.supervisor.tool_policy.is_allowed(tool_name, profile=profile, is_owner=is_owner):
+                    return ToolResult(
+                        success=False, output=None,
+                        error=f"Denied by tool policy: '{tool_name}' not permitted for profile '{profile}'",
+                        exit_code=-1,
+                    )
+            except Exception:
+                pass
+
+        # Hard safety backstop — runs for every tool call regardless of caller.
+        gate = self._safety_gate(tool_name, args, kwargs)
+        if gate is not None:
+            return gate
+
         if tool_name in self._dynamic_tools:
             # Execute dynamic tool
             tool_def = self._dynamic_tools[tool_name]
@@ -202,14 +304,21 @@ class Toolbox:
             {"name": "analyze_image", "description": "Analyze image with AI vision", "args": {"path": "string", "prompt": "string"}},
         ]
         
-        # Add dynamic tools
+        # Built-in tools are local and trusted.
+        for t in tools:
+            t.setdefault("source", "local")
+            t.setdefault("external", False)
+
+        # Add dynamic tools (mark external/source so the UI can show them distinctly).
         for name, tool_def in self._dynamic_tools.items():
             tools.append({
                 "name": name,
                 "description": tool_def["description"],
-                "args": tool_def["args"]
+                "args": tool_def["args"],
+                "source": tool_def.get("source", "local"),
+                "external": bool(tool_def.get("external", False)),
             })
-            
+
         return tools
 
 

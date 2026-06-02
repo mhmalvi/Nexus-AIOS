@@ -10,7 +10,7 @@ import asyncio
 import re
 
 # Add kernel to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'kernel'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
 class TestSafetyCheckerWhitespaceEvasion:

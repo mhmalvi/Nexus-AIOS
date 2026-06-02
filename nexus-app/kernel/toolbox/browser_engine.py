@@ -15,7 +15,7 @@ Features:
 - PDF generation
 - Multi-tab management
 
-Inspired by OpenClaw's browser-automation module.
+Inspired by open-source agent frameworks.
 """
 
 import asyncio
@@ -110,11 +110,17 @@ class BrowserEngine:
         headless: bool = True,
         user_data_dir: Optional[str] = None,
         proxy: Optional[str] = None,
+        firewall=None,
+        allow_private: bool = False,
     ):
         self._browser_type = browser_type
         self._headless = headless
         self._user_data_dir = user_data_dir
         self._proxy = proxy
+        # SSRF / firewall guard for navigation (F-NEW-2). Same policy as the
+        # HTTP tool: block loopback/link-local/private targets by default.
+        self.firewall = firewall
+        self.allow_private = allow_private
 
         # Playwright objects
         self._playwright = None
@@ -202,6 +208,42 @@ class BrowserEngine:
     # Navigation
     # ------------------------------------------------------------------
 
+    async def _navigation_guard(self, url: str) -> Optional[str]:
+        """Block navigation to internal/loopback/link-local targets + firewall
+        denies. Returns an error string if blocked, else None."""
+        from urllib.parse import urlparse
+        import socket
+        from .web_automation import _ip_is_blocked
+
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if not host:
+            return f"Invalid URL: {url}"
+
+        if not self.allow_private:
+            try:
+                loop = asyncio.get_event_loop()
+                infos = await loop.run_in_executor(
+                    None, lambda: socket.getaddrinfo(host, parsed.port or None)
+                )
+                addresses = {info[4][0] for info in infos}
+            except Exception:
+                addresses = {host}
+            for addr in addresses:
+                if _ip_is_blocked(addr):
+                    logger.warning("Blocked SSRF navigation to %s (%s)", url, addr)
+                    return f"Blocked: navigation to internal/loopback/link-local address ({addr})"
+
+        if self.firewall is not None:
+            try:
+                verdict = await self.firewall.check(url)
+                v = getattr(verdict, "value", str(verdict))
+                if v in ("blocked_exfiltration", "blocked_by_rule"):
+                    return f"Blocked by network firewall: {v}"
+            except Exception as e:
+                logger.debug("Firewall check error (allowing): %s", e)
+        return None
+
     async def browse(
         self,
         url: str,
@@ -220,6 +262,10 @@ class BrowserEngine:
         """
         if not self._initialized or not self._page:
             return BrowseResult(success=False, url=url, error="Browser not initialized")
+
+        guard_error = await self._navigation_guard(url)
+        if guard_error:
+            return BrowseResult(success=False, url=url, error=guard_error)
 
         t0 = time.time()
 

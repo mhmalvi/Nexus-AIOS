@@ -1,0 +1,3 @@
+u nexus - "Nexus AIOS System User" /var/lib/nexus /usr/bin/nologin
+m nexus video
+m nexus render

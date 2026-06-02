@@ -75,6 +75,30 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "approval_timeout_seconds": 300,
     "enable_safety_checker": True,
     "enable_ast_command_audit": True,
+    "enable_network_firewall": True,
+
+    # ── Trust Model (security by origin) ──────────────────────────────
+    # The dev at the CLI/terminal/GUI is TRUSTED (full power); inbound
+    # messaging / web content is UNTRUSTED (restricted + HIL). All of this is
+    # surfaced in the GUI settings panel so an admin can customize it.
+    "security": {
+        # Local owner capability tier: "user" (coding tools), "admin"/"dev" (full).
+        "access_level": "admin",
+        # Tool profile applied to each UNTRUSTED origin (see supervisor.tool_policy).
+        "origin_tool_profiles": {
+            "messaging": "messaging",
+            "web": "minimal",
+            "remote_agent": "coding",
+        },
+        # Untrusted, state-changing actions always require human approval.
+        "require_hil_for_untrusted": True,
+        # Advanced: additional origins to treat as trusted.
+        "extra_trusted_origins": [],
+        # Dev opt-in: skip supervisor validation/approval for the trusted local
+        # terminal entirely (full unguarded power). A catastrophic-pattern floor
+        # (rm -rf /, fork bombs) still applies in the toolbox gate.
+        "terminal_bypass_supervisor": False,
+    },
 
     # ── Self-Destruct System ──────────────────────────────────────────
     "self_destruct": {
@@ -113,15 +137,41 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "query_cache_size": 256,
     "query_cache_ttl_seconds": 300,
     "rate_limit_ms": 100,
+    # Max messages processed concurrently by the kernel loop (M2-4). Higher =
+    # more parallelism (and resource use); the stdin loop never blocks regardless.
+    "max_concurrent_messages": 8,
 
     # ── UI ────────────────────────────────────────────────────────────
     "theme": "dark",
     "persona": "default",  # SOUL.md persona file name
 
-    # ── OpenClaw Integration ──────────────────────────────────────────
-    "enable_openclaw": False,
-    "openclaw_gateway_url": "ws://localhost:8080/v1/s2s",
-    "openclaw_channels": ["whatsapp", "discord"],
+    # ── Browser ───────────────────────────────────────────────────────
+    # In-app browser renders captured screenshots; headless avoids a separate
+    # Chromium window popping up. Set false only for debugging.
+    "browser_headless": True,
+
+    # ── Messaging Integration ─────────────────────────────────────────
+    # Transport for external messaging (WhatsApp/Telegram/Discord/…).
+    #   "none"  → no gateway (default; no connection attempts / log spam)
+    #   "async" → self-hosted Async Bridge REST gateway (see bridge/ASYNC_BRIDGE.md)
+    "messaging_provider": "none",
+
+    # Async Bridge — a self-hosted, open-source messaging gateway (REST api).
+    "async_bridge_url": "http://localhost:4242",
+    "async_bridge_token": "",          # also reads ASYNC_BRIDGE_TOKEN / ~/.aether/async_bridge_token
+    "async_bridge_gateway": "",        # default gateway name for outbound replies
+
+    # ── Experimental / scaffolding subsystems ─────────────────────────
+    # These are NOT production-complete (NPU accel, federated learning, eBPF
+    # monitor, agent-to-agent sync). They stay in the tree (not removed) but
+    # are OFF by default and must be explicitly enabled by an admin/dev. Status
+    # reporting marks them as experimental so docs/UI never claim they're done.
+    "experimental": {
+        "npu_acceleration": False,
+        "federated_learning": False,
+        "ebpf_monitor": False,
+        "a2a_sync": False,
+    },
 
     # ── Agent Settings ────────────────────────────────────────────────
     "agents": {

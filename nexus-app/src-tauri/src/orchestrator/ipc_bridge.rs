@@ -19,7 +19,7 @@ pub enum IpcSource {
     Orchestrator,
     Kernel,
     Agent,
-    External(String), // e.g. "whatsapp", "discord" via OpenClaw
+    External(String), // e.g. "whatsapp", "discord" via the messaging gateway
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

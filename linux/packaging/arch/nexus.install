@@ -1,0 +1,35 @@
+post_install() {
+    echo ":: Nexus AIOS installed successfully!"
+    echo ":: "
+    echo ":: Configuration:"
+    echo ":: 1. Enable and start Ollama (required):"
+    echo "::    sudo systemctl enable --now ollama.service"
+    echo ":: "
+    echo ":: 2. Pre-pull required AI models:"
+    echo "::    ollama pull llama3.2:1b"
+    echo "::    ollama pull llama3.2:3b"
+    echo "::    ollama pull nomic-embed-text"
+    echo ":: "
+    echo ":: 3. Enable Nexus services:"
+    echo "::    sudo systemctl enable --now nexus-core.service"
+    echo "::    sudo systemctl enable --now nexus-kernel.service"
+    echo ":: "
+    echo ":: Logs are available at: journalctl -u nexus-core -u nexus-kernel"
+}
+
+post_upgrade() {
+    echo ":: Nexus updated. Restarting services..."
+    systemctl daemon-reload
+    if systemctl is-active --quiet nexus-core.service; then
+        systemctl restart nexus-core.service
+    fi
+    if systemctl is-active --quiet nexus-kernel.service; then
+        systemctl restart nexus-kernel.service
+    fi
+}
+
+pre_remove() {
+    echo ":: Stopping Nexus services..."
+    systemctl stop nexus-core.service nexus-kernel.service 2>/dev/null || true
+    systemctl disable nexus-core.service nexus-kernel.service 2>/dev/null || true
+}

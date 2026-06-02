@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { MessageSquare, Send, RefreshCw, Hash, Phone, Globe, Wifi, WifiOff, ChevronRight, Settings, Search, ToggleLeft, ToggleRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { messagingApi, KernelResponse } from "../../services/tauriApi";
-import { mockTauri } from "../../services/mockTauri";
+import { kernelEventBus } from "../../services/kernelEventBus";
 
 interface Channel {
     type: string;
@@ -40,6 +40,7 @@ export function MessagingDashboard() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [channelStats, setChannelStats] = useState<{ total_messages: number; active_channels: number }>({ total_messages: 0, active_channels: 0 });
+    const [gatewayConnected, setGatewayConnected] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -57,9 +58,9 @@ export function MessagingDashboard() {
         }
     }, [selectedChannel]);
 
-    // Subscribe to real-time openclaw events
+    // Subscribe to real-time messaging events
     useEffect(() => {
-        const unsub = mockTauri.subscribeOpenClaw((msg: any) => {
+        const unsub = kernelEventBus.subscribeAsyncMessage((msg: any) => {
             const channelType = msg.channel || msg.platform || 'unknown';
             // Append message if it matches the currently selected channel
             if (selectedChannel && channelType === selectedChannel) {
@@ -91,6 +92,7 @@ export function MessagingDashboard() {
             if (res?.success && res?.data?.channels) {
                 setChannels(res.data.channels);
                 setChannelStats(res.data.stats || { total_messages: 0, active_channels: 0 });
+                setGatewayConnected(!!res.data.stats?.gateway_connected);
             } else if (res?.error) {
                 setError(res.error);
             }
@@ -163,7 +165,7 @@ export function MessagingDashboard() {
                         <MessageSquare className="w-4 h-4 text-primary" />
                         <span className="text-xs font-bold uppercase tracking-widest text-foreground/80">Messaging</span>
                     </div>
-                    <p className="text-[9px] text-muted-foreground mt-1">OpenClaw Channel Router</p>
+                    <p className="text-[9px] text-muted-foreground mt-1">Multi-platform Channel Router</p>
                 </div>
 
                 {/* Channel List */}
@@ -182,7 +184,7 @@ export function MessagingDashboard() {
                         <div className="text-center py-6 text-muted-foreground">
                             <MessageSquare className="w-6 h-6 mx-auto mb-2 opacity-20" />
                             <p className="text-[10px]">No channels configured.</p>
-                            <p className="text-[9px] opacity-60 mt-1">Enable OpenClaw in Settings.</p>
+                            <p className="text-[9px] opacity-60 mt-1">Enable messaging in Settings.</p>
                         </div>
                     )}
                     {channels.map(channel => (
@@ -227,6 +229,15 @@ export function MessagingDashboard() {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Gateway status banner — messaging requires the Async Bridge gateway */}
+                {!loading && !gatewayConnected && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-500">
+                        <WifiOff className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[10px]">
+                            Messaging gateway offline — no bridge connected. Channels can't send or receive until the gateway is running and configured in Settings.
+                        </span>
+                    </div>
+                )}
                 {!selectedChannel ? (
                     /* No channel selected */
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">

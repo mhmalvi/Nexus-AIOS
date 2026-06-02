@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  Nexus AIOS D-Bus Interface
+  Allows external applications to interact with Nexus agents
+-->
+<node name="/org/nexus/Agent">
+  
+  <!-- Main Agent Interface -->
+  <interface name="org.nexus.Agent">
+    
+    <!-- Send a natural language query to Nexus -->
+    <method name="Query">
+      <arg name="message" type="s" direction="in"/>
+      <arg name="context" type="s" direction="in"/>
+      <arg name="response" type="s" direction="out"/>
+      <arg name="success" type="b" direction="out"/>
+    </method>
+    
+    <!-- Execute a specific tool -->
+    <method name="ExecuteTool">
+      <arg name="tool_name" type="s" direction="in"/>
+      <arg name="args_json" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+      <arg name="success" type="b" direction="out"/>
+    </method>
+    
+    <!-- Get current system health status -->
+    <method name="GetHealth">
+      <arg name="health_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Subscribe to agent events -->
+    <signal name="AgentEvent">
+      <arg name="event_type" type="s"/>
+      <arg name="payload_json" type="s"/>
+    </signal>
+    
+    <!-- Emitted when an action requires user approval -->
+    <signal name="ApprovalRequired">
+      <arg name="request_id" type="s"/>
+      <arg name="action" type="s"/>
+      <arg name="risk_level" type="s"/>
+      <arg name="details_json" type="s"/>
+    </signal>
+    
+    <!-- Properties -->
+    <property name="Version" type="s" access="read"/>
+    <property name="IsRunning" type="b" access="read"/>
+    <property name="ActiveModel" type="s" access="read"/>
+    
+  </interface>
+  
+  <!-- Memory Interface -->
+  <interface name="org.nexus.Memory">
+    
+    <method name="Store">
+      <arg name="content" type="s" direction="in"/>
+      <arg name="tier" type="s" direction="in"/> <!-- working, short_term, long_term -->
+      <arg name="metadata_json" type="s" direction="in"/>
+      <arg name="entry_id" type="s" direction="out"/>
+    </method>
+    
+    <method name="Retrieve">
+      <arg name="query" type="s" direction="in"/>
+      <arg name="tier" type="s" direction="in"/>
+      <arg name="limit" type="u" direction="in"/>
+      <arg name="results_json" type="s" direction="out"/>
+    </method>
+    
+    <method name="GetStats">
+      <arg name="stats_json" type="s" direction="out"/>
+    </method>
+    
+  </interface>
+  
+  <!-- Voice Interface -->
+  <interface name="org.nexus.Voice">
+    
+    <method name="Speak">
+      <arg name="text" type="s" direction="in"/>
+      <arg name="streaming" type="b" direction="in"/>
+      <arg name="success" type="b" direction="out"/>
+    </method>
+    
+    <method name="StartListening">
+      <arg name="duration_seconds" type="d" direction="in"/>
+      <arg name="transcription" type="s" direction="out"/>
+    </method>
+    
+    <signal name="WakeWordDetected"/>
+    
+    <signal name="TranscriptionComplete">
+      <arg name="text" type="s"/>
+      <arg name="confidence" type="d"/>
+    </signal>
+    
+    <property name="IsListening" type="b" access="read"/>
+    
+  </interface>
+  
+  <!-- Agent-to-Agent (A2A) Interface -->
+  <interface name="org.nexus.A2A">
+    
+    <!-- Request connection to a remote Nexus peer -->
+    <method name="RequestA2AConnection">
+      <arg name="peer_address" type="s" direction="in"/>
+      <arg name="peer_port" type="u" direction="in"/>
+      <arg name="success" type="b" direction="out"/>
+      <arg name="peer_id" type="s" direction="out"/>
+    </method>
+    
+    <!-- Disconnect from a peer -->
+    <method name="DisconnectPeer">
+      <arg name="peer_id" type="s" direction="in"/>
+      <arg name="success" type="b" direction="out"/>
+    </method>
+    
+    <!-- Send a task request to a remote agent -->
+    <method name="RequestRemoteTask">
+      <arg name="peer_id" type="s" direction="in"/>
+      <arg name="task_json" type="s" direction="in"/>
+      <arg name="response_json" type="s" direction="out"/>
+      <arg name="success" type="b" direction="out"/>
+    </method>
+    
+    <!-- Query a remote agent's memory -->
+    <method name="QueryRemoteMemory">
+      <arg name="peer_id" type="s" direction="in"/>
+      <arg name="query" type="s" direction="in"/>
+      <arg name="tier" type="s" direction="in"/>
+      <arg name="results_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Get list of connected peers -->
+    <method name="GetConnectedPeers">
+      <arg name="peers_json" type="s" direction="out"/>
+    </method>
+    
+    <!-- Emitted when a new peer is discovered via mDNS -->
+    <signal name="A2APeerDiscovered">
+      <arg name="peer_id" type="s"/>
+      <arg name="peer_address" type="s"/>
+      <arg name="peer_port" type="u"/>
+      <arg name="capabilities_json" type="s"/>
+    </signal>
+    
+    <!-- Emitted when a peer disconnects -->
+    <signal name="A2APeerDisconnected">
+      <arg name="peer_id" type="s"/>
+      <arg name="reason" type="s"/>
+    </signal>
+    
+    <!-- Emitted when a remote task request is received -->
+    <signal name="A2ATaskReceived">
+      <arg name="request_id" type="s"/>
+      <arg name="source_peer" type="s"/>
+      <arg name="task_json" type="s"/>
+    </signal>
+    
+    <property name="LocalNodeId" type="s" access="read"/>
+    <property name="ConnectedPeerCount" type="u" access="read"/>
+    
+  </interface>
+  
+</node>

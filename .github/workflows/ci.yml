@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: nexus-app
+
+jobs:
+  # ── Frontend: type-check + production build (+ Playwright e2e) ──────────
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: nexus-app/package-lock.json
+      - run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Build
+        run: npm run build
+      - name: Playwright e2e
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+        continue-on-error: true  # e2e needs the app running; advisory until wired in CI
+
+  # ── Python kernel: pytest + ruff (advisory) ─────────────────────────────
+  kernel:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus-app/kernel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || pip install lancedb aiohttp pydantic numpy
+          pip install pytest pytest-asyncio ruff cryptography
+      - name: Lint (advisory)
+        run: ruff check . || true
+      - name: Tests (gated)
+        run: pytest tests/ -q
+      - name: Root integration/smoke tests (advisory)
+        working-directory: nexus-app
+        # These read repo-root-relative paths / need optional deps, so they run
+        # from nexus-app and are advisory (not a merge gate). test_nexus needs a
+        # live Ollama; test_linux_integration is Linux-specific.
+        run: pytest test_wiring_audit.py test_phase4.py test_phase5_strategyb.py test_linux_integration.py -q
+        continue-on-error: true
+
+  # ── Rust shell: fmt + clippy + test ─────────────────────────────────────
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nexus-app/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: nexus-app/src-tauri
+      - name: System deps (Tauri/webkit)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  # ── Supply chain: dependency vulnerability scans (M4-2) ─────────────────
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit (Python deps)
+        run: |
+          pip install pip-audit
+          pip-audit -r nexus-app/kernel/requirements.txt || true  # advisory until clean
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: npm audit (frontend deps)
+        working-directory: nexus-app
+        run: npm audit --audit-level=high || true  # advisory until clean
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo audit (Rust deps)
+        run: |
+          cargo install cargo-audit --locked || true
+          (cd nexus-app/src-tauri && cargo audit) || true  # advisory until clean
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          pip install cyclonedx-bom || true
+          # Python kernel SBOM from the pinned requirements.
+          cyclonedx-py requirements nexus-app/kernel/requirements.txt -o sbom-python.json || \
+            cyclonedx-py -r -i nexus-app/kernel/requirements.txt -o sbom-python.json || true
+          # Frontend SBOM.
+          (cd nexus-app && npx -y @cyclonedx/cyclonedx-npm --output-file ../sbom-npm.json) || true
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom-*.json
+          if-no-files-found: warn

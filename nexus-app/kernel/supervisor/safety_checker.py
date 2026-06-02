@@ -188,20 +188,29 @@ class SafetyChecker:
             matched_pattern=None
         )
     
-    def assess_risk(self, action: str) -> str:
-        """Assess the risk level of an action"""
-        
+    def classify_risk(self, action: str) -> tuple:
+        """Assess the risk level of an action.
+
+        Returns ``(level, recognized)`` where ``recognized`` is False when the
+        action matched none of the risk keywords. Callers can treat an
+        unrecognized action as fail-safe (require approval) rather than letting
+        it run silently at the implicit ``medium`` default (F4).
+        """
+
         action_lower = action.lower()
-        
-        # Check each risk level
+
         for level in ["critical", "high", "medium", "low"]:
             keywords = self.RISK_KEYWORDS.get(level, [])
             for keyword in keywords:
                 if keyword in action_lower:
-                    return level
-        
-        # Default to medium if no keywords match
-        return "medium"
+                    return level, True
+
+        # Nothing matched — unknown action.
+        return "medium", False
+
+    def assess_risk(self, action: str) -> str:
+        """Assess the risk level of an action (level only; see classify_risk)."""
+        return self.classify_risk(action)[0]
     
     def add_pattern(self, pattern: str):
         """Add a new pattern to the blacklist"""

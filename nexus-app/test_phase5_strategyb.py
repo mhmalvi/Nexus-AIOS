@@ -1,5 +1,5 @@
 """
-Tests for Phase 5 Strategy B — OpenClaw Cherry-Pick components.
+Tests for Phase 5 Strategy B — cherry-picked agent components.
 Validates: SkillLoader, SemanticSnapshot, DockerSandbox availability, ClawHub adapter.
 """
 

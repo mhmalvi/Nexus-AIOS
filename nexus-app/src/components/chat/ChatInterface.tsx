@@ -7,7 +7,7 @@ import { ActionRequest, Conversation } from "../../types";
 import ReactMarkdown, { Components } from 'react-markdown';
 import { Plus, MessageSquare, Trash2, Copy, RefreshCw, Check, ChevronLeft, ChevronRight, MoreHorizontal, Edit2, X, Mic, MicOff } from 'lucide-react';
 import { ChannelExplorer } from './ChannelExplorer';
-import { mockTauri } from '../../services/mockTauri';
+import { kernelEventBus } from '../../services/kernelEventBus';
 
 // Rich, readable Markdown styling for assistant replies (headings, lists,
 // code blocks, inline code, links, quotes, tables, rules).
@@ -97,15 +97,15 @@ export function ChatInterface() {
         }
     }, [conversations]);
 
-    // Subscribe to OpenClaw messages — show inbound messages inline in chat
+    // Subscribe to inbound messaging — show inbound messages inline in chat
     useEffect(() => {
-        const unsub = mockTauri.subscribeOpenClaw((msg: any) => {
+        const unsub = kernelEventBus.subscribeAsyncMessage((msg: any) => {
             const sender = msg.sender || 'Unknown';
-            const channel = msg.channel || msg.platform || 'openclaw';
+            const channel = msg.channel || msg.platform || 'async';
             const content = typeof msg.content === 'string' ? msg.content : (msg.content?.text || 'New message');
             addMessage({
                 id: `oc-chat-${Date.now()}`,
-                role: 'openclaw',
+                role: 'async',
                 content,
                 timestamp: new Date(),
                 metadata: { sender, channel },
@@ -340,19 +340,19 @@ export function ChatInterface() {
                                             scale: 1
                                         }}
                                         transition={{ duration: 0.8, ease: "easeOut" }}
-                                        className={`group flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} ${msg.role === 'openclaw' ? 'border-l-2 border-cyan-500/30 pl-4' : ''}`}
+                                        className={`group flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} ${msg.role === 'async' ? 'border-l-2 border-cyan-500/30 pl-4' : ''}`}
                                     >
-                                        <span className={`text-[10px] tracking-[0.2em] uppercase mb-2 opacity-40 ${msg.role === 'user' ? 'text-right' : 'text-left'} ${msg.role === 'openclaw' ? 'text-cyan-400' : ''}`}>
-                                            {msg.role === 'user' ? 'Architect' : msg.role === 'openclaw' ? `OpenClaw \u00B7 ${msg.metadata?.sender || msg.metadata?.channel || ''}` : 'Echoes'}
+                                        <span className={`text-[10px] tracking-[0.2em] uppercase mb-2 opacity-40 ${msg.role === 'user' ? 'text-right' : 'text-left'} ${msg.role === 'async' ? 'text-cyan-400' : ''}`}>
+                                            {msg.role === 'user' ? 'Architect' : msg.role === 'async' ? `${msg.metadata?.channel || 'Async'} \u00B7 ${msg.metadata?.sender || ''}` : 'Echoes'}
                                         </span>
 
                                         <div className={`relative max-w-[90%] ${msg.role === 'user'
                                             ? 'text-right text-lg md:text-xl font-light leading-relaxed text-foreground'
-                                            : msg.role === 'openclaw'
+                                            : msg.role === 'async'
                                                 ? 'text-left text-lg font-light leading-relaxed text-cyan-400/90'
                                                 : 'text-left w-full'
                                             }`}>
-                                            {msg.role === 'openclaw' ? (
+                                            {msg.role === 'async' ? (
                                                 <div className="flex items-start gap-2">
                                                     <MessageSquare className="w-4 h-4 text-cyan-500 mt-1.5 shrink-0" />
                                                     <span>{msg.content}</span>

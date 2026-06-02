@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Terminal, ArrowRight, Zap, FileText, LayoutTemplate, BoxSelect } from "lucide-react";
 import { useStore } from "../../context/StoreContext";
 import { AetherPulse } from "../ui/AetherPulse";
-import { mockTauri } from "../../services/mockTauri";
+import { kernelEventBus } from "../../services/kernelEventBus";
 
 export function AetherCommandBar() {
   const { isGhostBarOpen, setGhostBarOpen, addMessage, addToHistory, agent, spawnArtifact, setFocusMode, startListening } = useStore();
@@ -36,7 +36,7 @@ export function AetherCommandBar() {
   const handleSubmit = (cmd: string = input) => {
     if (cmd === "Trigger Voice") {
       startListening(); // UI feedback
-      mockTauri.triggerVoiceListening(); // Backend trigger
+      kernelEventBus.triggerVoiceListening(); // Backend trigger
       setGhostBarOpen(false);
       return;
     }

@@ -2,7 +2,7 @@
 Nexus Skill Loader
 Discovers and parses SKILL.md files from the skills directory tree.
 
-Adopted from OpenClaw's SKILL.md convention:
+SKILL.md convention:
   - YAML frontmatter (name, description, metadata)
   - Markdown body containing instructions for the LLM
 
@@ -153,7 +153,7 @@ class SkillLoader:
                 metadata = SkillMetadata(
                     name=meta_dict.get("name", skill_dir.name),
                     description=meta_dict.get("description", ""),
-                    requires=meta_dict.get("metadata", {}).get("openclaw", {}).get("requires", {})
+                    requires=meta_dict.get("metadata", {}).get("aether", {}).get("requires", {})
                         if isinstance(meta_dict.get("metadata"), dict) else {},
                     extra={k: v for k, v in meta_dict.items() if k not in ("name", "description", "metadata")},
                 )

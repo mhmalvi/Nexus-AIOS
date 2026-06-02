@@ -23,6 +23,32 @@ from typing import Optional, List, Dict, Any, Callable, Awaitable
 
 logger = logging.getLogger("aether.self_destruct")
 
+# PIN hashing — salted PBKDF2 (stdlib, no extra deps). Legacy bare-sha256
+# hashes are still verifiable and transparently upgraded on next set_pin().
+_PBKDF2_ALG = "sha256"
+_PBKDF2_ITERATIONS = 200_000
+_MIN_PIN_LENGTH = 4
+
+
+def _hash_pin(pin: str, salt: Optional[bytes] = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac(_PBKDF2_ALG, pin.encode(), salt, _PBKDF2_ITERATIONS)
+    return f"pbkdf2_{_PBKDF2_ALG}${_PBKDF2_ITERATIONS}${salt.hex()}${dk.hex()}"
+
+
+def _verify_pin_hash(pin: str, stored: Optional[str]) -> bool:
+    if not stored:
+        return False
+    try:
+        if stored.startswith("pbkdf2_"):
+            _, iters, salt_hex, hash_hex = stored.split("$")
+            dk = hashlib.pbkdf2_hmac(_PBKDF2_ALG, pin.encode(), bytes.fromhex(salt_hex), int(iters))
+            return secrets.compare_digest(dk.hex(), hash_hex)
+        # Legacy bare sha256 (64 hex chars).
+        return secrets.compare_digest(hashlib.sha256(pin.encode()).hexdigest(), stored)
+    except Exception:
+        return False
+
 
 class DestructLevel(str, Enum):
     SOFT_LOCK = "soft_lock"
@@ -87,6 +113,10 @@ class SelfDestructEngine:
         self._dead_man_task: Optional[asyncio.Task] = None
         self._on_lock: Optional[Callable[[], Awaitable[None]]] = None
         self._on_alert: Optional[Callable[[str], Awaitable[None]]] = None
+        # Optional REAL second-factor verifier (e.g. a future voice-print check).
+        # Until one is registered, the second factor is a typed confirmation
+        # phrase — never a caller-supplied "voice_verified=True" boolean (F8).
+        self._second_factor: Optional[Callable[[], Awaitable[bool]]] = None
         self._failed_auth = 0
 
         self._wipe_targets: Dict[DestructLevel, List[str]] = {
@@ -114,26 +144,74 @@ class SelfDestructEngine:
         logger.info("Self-destruct engine initialized")
 
     def set_pin(self, pin: str) -> None:
-        self._pin_hash = hashlib.sha256(pin.encode()).hexdigest()
+        """Set the self-destruct PIN (salted PBKDF2). Rejects weak PINs."""
+        if not pin or len(pin) < _MIN_PIN_LENGTH:
+            raise ValueError(f"PIN must be at least {_MIN_PIN_LENGTH} characters")
+        self._pin_hash = _hash_pin(pin)
         self._save_config()
 
+    def is_pin_set(self) -> bool:
+        return bool(self._pin_hash)
+
     def verify_pin(self, pin: str) -> bool:
+        # No default-allow: an unconfigured PIN never authorizes anything (F8).
         if not self._pin_hash:
-            return True
-        return hashlib.sha256(pin.encode()).hexdigest() == self._pin_hash
+            return False
+        verified = _verify_pin_hash(pin, self._pin_hash)
+        # Transparently upgrade a legacy bare-sha256 hash to PBKDF2 on success.
+        if verified and not self._pin_hash.startswith("pbkdf2_"):
+            self._pin_hash = _hash_pin(pin)
+            self._save_config()
+        return verified
 
     def register_callbacks(self, on_lock=None, on_alert=None):
         self._on_lock = on_lock
         self._on_alert = on_alert
 
-    def _check_auth(self, level, pin="", voice_verified=False):
+    def register_second_factor(self, verifier: Callable[[], Awaitable[bool]]) -> None:
+        """Register a REAL second-factor verifier (e.g. voice-print). When set,
+        it can satisfy the second factor in place of the typed phrase."""
+        self._second_factor = verifier
+
+    @staticmethod
+    def required_phrase(level: "DestructLevel") -> str:
+        return f"CONFIRM {level.value.upper()}"
+
+    async def _check_auth(self, level, pin="", confirmation_phrase="", _authorized=False):
         if level == DestructLevel.SOFT_LOCK:
             return True, "OK"
+
+        # Destructive actions require a configured PIN — never default-allow.
+        if not self.is_pin_set():
+            return False, "No PIN configured — destructive actions are disabled. Set a PIN first."
+
+        # Pre-authorized internal triggers (e.g. dead-man switch) skip the
+        # interactive second factor but still required a configured engine.
+        if _authorized:
+            return True, "Pre-authorized"
+
         if not self.verify_pin(pin):
             self._failed_auth += 1
             return False, "Invalid PIN"
-        if level in (DestructLevel.DATA_WIPE, DestructLevel.FULL_DESTRUCT) and not voice_verified:
-            return False, "Voice verification required"
+
+        # High-impact levels need a REAL second factor: a typed confirmation
+        # phrase, or a registered verifier callback. A bare boolean is never
+        # accepted as proof (F8).
+        if level in (DestructLevel.DATA_WIPE, DestructLevel.FULL_DESTRUCT):
+            ok2 = False
+            required = self.required_phrase(level)
+            if confirmation_phrase and secrets.compare_digest(
+                confirmation_phrase.strip().upper(), required
+            ):
+                ok2 = True
+            elif self._second_factor is not None:
+                try:
+                    ok2 = bool(await self._second_factor())
+                except Exception:
+                    ok2 = False
+            if not ok2:
+                return False, f"Second factor required: type the confirmation phrase '{required}'"
+
         return True, "Verified"
 
     async def arm(self, level: DestructLevel) -> bool:
@@ -143,8 +221,12 @@ class SelfDestructEngine:
         self._audit(f"ARMED at {level.value}")
         return True
 
-    async def execute(self, level: DestructLevel, pin="", voice_verified=False, countdown_s=10) -> DestructResult:
-        ok, reason = self._check_auth(level, pin, voice_verified)
+    async def execute(self, level: DestructLevel, pin="", confirmation_phrase="",
+                      voice_verified=False, countdown_s=10, _authorized=False) -> DestructResult:
+        # NOTE: `voice_verified` is retained for backward compatibility but is
+        # deliberately IGNORED as proof — the second factor is the typed
+        # confirmation phrase or a registered verifier (see _check_auth, F8).
+        ok, reason = await self._check_auth(level, pin, confirmation_phrase, _authorized=_authorized)
         if not ok:
             self._audit(f"AUTH FAILED: {reason}")
             if self._failed_auth >= 3:
@@ -259,8 +341,9 @@ class SelfDestructEngine:
                 threshold = self._dead_man.check_in_interval_hours
                 if elapsed_h > threshold + self._dead_man.grace_period_hours:
                     self._audit("Dead Man's Switch TRIGGERED")
+                    # Pre-authorized by the operator's dead-man configuration.
                     await self.execute(level=self._dead_man.escalation_level,
-                                       voice_verified=True, countdown_s=0)
+                                       _authorized=True, countdown_s=0)
                     break
                 elif elapsed_h > threshold and self._on_alert:
                     rem = threshold + self._dead_man.grace_period_hours - elapsed_h

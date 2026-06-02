@@ -1,0 +1,54 @@
+[Unit]
+Description=Nexus AIOS Kernel - Python AI Reasoning Engine
+Documentation=https://github.com/nexus-aios
+After=network.target dbus.service nexus-ollama.service
+Wants=nexus-ollama.service
+BindsTo=dbus.service
+
+[Service]
+Type=notify
+User=nexus
+Group=nexus
+WorkingDirectory=/opt/nexus/app/kernel
+ExecStart=/opt/nexus/.venv/bin/python /opt/nexus/app/kernel/main.py --daemon
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Watchdog for health monitoring (30s ping interval)
+WatchdogSec=60
+
+# Environment
+Environment="NEXUS_HOME=/opt/nexus"
+Environment="NEXUS_DATA=/var/lib/nexus"
+Environment="OLLAMA_HOST=http://localhost:11434"
+Environment="PYTHONUNBUFFERED=1"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/nexus /tmp
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# D-Bus access
+BusName=org.nexus.Agent
+
+# Resource limits
+MemoryMax=8G
+TasksMax=256
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nexus-kernel
+
+[Install]
+WantedBy=multi-user.target
+Also=nexus-kernel.socket

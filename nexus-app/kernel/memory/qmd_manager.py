@@ -14,7 +14,7 @@ Features:
 - Workspace-aware scoping (per-project knowledge bases)
 - Access tracking and LRU ordering
 
-Inspired by OpenClaw's memory/qmd-manager.ts
+Inspired by open-source agent frameworks.
 """
 
 import json

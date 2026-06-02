@@ -4,7 +4,10 @@ Detects the wake phrase "Hey Nexus" to activate voice input
 """
 
 import asyncio
+import queue
+import sys
 import threading
+import time
 from typing import Optional, Callable
 import numpy as np
 
@@ -118,15 +121,30 @@ class WakeWordDetector:
         
         self._is_running = True
         self._stop_event.clear()
-        
-        def audio_callback(indata, frames, time, status):
+        loop = asyncio.get_running_loop()
+
+        # Hand audio from PortAudio's real-time thread to a worker. The callback
+        # MUST stay cheap: doing ML inference inside it stalls the audio thread
+        # (constant "input overflow") and a stall/raise there can take the whole
+        # process down with no Python traceback. So we only copy + enqueue here.
+        audio_q: "queue.Queue" = queue.Queue(maxsize=50)
+        overflow = {"count": 0, "last_log": 0.0}
+
+        def audio_callback(indata, frames, time_info, status):
             if status:
-                print(f"⚠️ Audio status: {status}")
-            if not self._stop_event.is_set():
-                # Process audio chunk
-                audio = indata[:, 0] if indata.ndim > 1 else indata
-                self._process_audio(audio.flatten())
-        
+                # Don't print from the audio thread on every block — just tally.
+                overflow["count"] += 1
+            if self._stop_event.is_set():
+                return
+            try:
+                mono = indata[:, 0] if indata.ndim > 1 else indata
+                # COPY: PortAudio reuses `indata`'s buffer after the callback returns.
+                audio_q.put_nowait(np.array(mono, copy=True).flatten())
+            except queue.Full:
+                pass  # drop under backpressure rather than block the RT thread
+            except Exception:
+                pass  # never let an exception escape into the native callback
+
         try:
             with sd.InputStream(
                 samplerate=self.SAMPLE_RATE,
@@ -137,34 +155,56 @@ class WakeWordDetector:
                 device=self.device_index
             ):
                 while not self._stop_event.is_set():
-                    await asyncio.sleep(0.05)
+                    try:
+                        chunk = audio_q.get_nowait()
+                    except queue.Empty:
+                        await asyncio.sleep(0.02)
+                        continue
+                    # Run inference OFF the event loop and the audio thread; a
+                    # model error must not kill the stream or the kernel.
+                    try:
+                        await loop.run_in_executor(None, self._process_audio, chunk)
+                    except Exception as e:
+                        print(f"⚠️ Wake word processing error (recovered): {e}", file=sys.stderr)
+                    # Throttled overflow summary (at most once per 10s).
+                    now = time.time()
+                    if overflow["count"] and now - overflow["last_log"] > 10:
+                        print(f"⚠️ Audio input overflowed {overflow['count']}x in last interval", file=sys.stderr)
+                        overflow["count"] = 0
+                        overflow["last_log"] = now
+        except Exception as e:
+            print(f"⚠️ Wake word audio stream error (detection stopped): {e}", file=sys.stderr)
         finally:
             self._is_running = False
-    
+
     def _process_audio(self, audio: np.ndarray):
-        """Process audio chunk and check for wake word"""
+        """Process audio chunk and check for wake word. Runs in a worker thread;
+        must swallow its own errors so the audio stream/kernel stay alive."""
         if self._model is None:
             return
-        
-        # OpenWakeWord expects int16 audio
-        if audio.dtype != np.int16:
-            audio = (audio * 32767).astype(np.int16)
-        
-        # Get predictions
-        predictions = self._model.predict(audio)
-        
-        # Check each wake word model
-        for wakeword, confidence in predictions.items():
-            if confidence >= self.threshold:
-                print(f"🔔 Wake word detected! ({wakeword}: {confidence:.2f})")
-                self._detected_event.set()
-                
-                if self._detection_callback:
-                    self._detection_callback()
-                    
-                # Reset the model to avoid repeated detections
-                self._model.reset()
-                break
+        try:
+            # OpenWakeWord expects int16 audio
+            if audio.dtype != np.int16:
+                audio = (audio * 32767).astype(np.int16)
+
+            predictions = self._model.predict(audio)
+
+            for wakeword, confidence in predictions.items():
+                if confidence >= self.threshold:
+                    print(f"🔔 Wake word detected! ({wakeword}: {confidence:.2f})")
+                    self._detected_event.set()
+
+                    if self._detection_callback:
+                        try:
+                            self._detection_callback()
+                        except Exception as e:
+                            print(f"⚠️ Wake word callback error: {e}", file=sys.stderr)
+
+                    # Reset the model to avoid repeated detections
+                    self._model.reset()
+                    break
+        except Exception as e:
+            print(f"⚠️ Wake word inference error (recovered): {e}", file=sys.stderr)
     
     async def start_continuous_detection(self):
         """Start continuous wake word detection with callbacks"""

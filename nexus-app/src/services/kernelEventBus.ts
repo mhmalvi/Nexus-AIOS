@@ -13,9 +13,16 @@ if (isTauri) {
   const tauriCore = await import('@tauri-apps/api/core');
   listen = tauriEvent.listen;
   invoke = tauriCore.invoke;
-} else {
-  // Running in browser - use mock implementations
-  console.warn('🌐 Running in browser mode - using mock Tauri bridge');
+} else if (import.meta.env?.DEV) {
+  // DEV-ONLY browser fallback. These mocks let the UI render without the Tauri
+  // shell during `vite dev`. They are NEVER compiled into a production build
+  // (the `else` below throws instead), so a real user can never be shown
+  // fabricated kernel/security state. Security-sensitive commands return
+  // explicit errors rather than fake "success" (see below).
+  console.warn(
+    '🌐 [DEV] Tauri not detected — using MOCK kernel bridge. ' +
+    'Responses are fake and for UI development only.'
+  );
 
   // Mock listen - just stores callbacks but can't receive real events
   const eventListeners = new Map<string, Function[]>();
@@ -41,17 +48,15 @@ if (isTauri) {
         const msgType = args?.messageType;
         const payload = args?.message ? JSON.parse(args.message) : {};
 
-        // Mock Security/Firewall responses
+        // Security-sensitive commands must NOT be faked as success — that could
+        // mislead a developer into thinking the destruct/lock state changed.
+        // Return an explicit error so the UI surfaces "backend unavailable".
         if (msgType === 'security') {
-          if (payload.action === 'destruct_status') {
-            return { success: true, message_type: 'security_status', data: { armed: true, level: 'soft_lock' } };
-          }
-          if (payload.action === 'initiate_destruct') {
-            return { success: true, message_type: 'destruct_result', data: { status: 'COUNTDOWN', message: 'Destruct sequence initiated (Mock)' } };
-          }
-          if (payload.action === 'cancel_destruct') {
-            return { success: true, message_type: 'destruct_cancel', data: { message: 'Sequence aborted' } };
-          }
+          return {
+            success: false,
+            message_type: 'error',
+            error: '[DEV mock] security commands are not simulated — run under Tauri with the kernel for real security state.',
+          };
         }
 
         if (msgType === 'firewall') {
@@ -188,7 +193,7 @@ if (isTauri) {
           federated_learning: false,
           skills_loaded: 12,
           sandbox_available: true,
-          openclaw_connected: true,
+          messaging_connected: true,
           environment: 'windows',
           security_available: true,
           self_destruct_armed: false,
@@ -305,11 +310,25 @@ if (isTauri) {
         return { success: false, error: `Unknown command: ${command}` };
     }
   };
+} else {
+  // Production build running outside Tauri (e.g. opened as a plain web page).
+  // There is no kernel here. Fail loudly instead of fabricating success so the
+  // UI shows a real error state rather than fake data.
+  const unavailable = () => {
+    throw new Error(
+      'Nexus kernel bridge unavailable: the app must run inside the Tauri desktop shell.'
+    );
+  };
+  listen = async () => () => {}; // no-op unsubscribe; no events will ever fire
+  invoke = async (command: string) => {
+    console.error(`Kernel bridge unavailable (invoke '${command}' outside Tauri)`);
+    unavailable();
+  };
 }
 
 type Listener<T> = (payload: T) => void;
 
-class MockTauriService {
+class KernelEventBus {
   private thoughtListeners: Listener<ThoughtEvent>[] = [];
   private responseListeners: Listener<any>[] = [];
   private hilListeners: Listener<ActionRequest>[] = [];
@@ -319,7 +338,7 @@ class MockTauriService {
   private voiceTranscriptListeners: Listener<string>[] = [];
   private chunkListeners: Listener<string>[] = [];
   private taoListeners: Listener<{ type: string, content: string, step_id?: string, details?: any }>[] = [];
-  private openclawListeners: Listener<any>[] = [];
+  private asyncMessageListeners: Listener<any>[] = [];
 
   constructor() {
     this.initListeners();
@@ -398,8 +417,8 @@ class MockTauriService {
           this.emitVoiceStatus(innerPayload.status === 'listening');
         } else if (innerEvent === 'voice_transcription') {
           this.emitVoiceTranscript(innerPayload.text);
-        } else if (innerEvent === 'openclaw_message') {
-          this.emitOpenClaw(innerPayload);
+        } else if (innerEvent === 'async_message') {
+          this.emitAsyncMessage(innerPayload);
         }
         return;
       }
@@ -493,9 +512,9 @@ class MockTauriService {
     return () => { this.taoListeners = this.taoListeners.filter(l => l !== callback); };
   }
 
-  subscribeOpenClaw(callback: Listener<any>) {
-    this.openclawListeners.push(callback);
-    return () => { this.openclawListeners = this.openclawListeners.filter(l => l !== callback); };
+  subscribeAsyncMessage(callback: Listener<any>) {
+    this.asyncMessageListeners.push(callback);
+    return () => { this.asyncMessageListeners = this.asyncMessageListeners.filter(l => l !== callback); };
   }
 
   private emitResponse(response: any) {
@@ -534,8 +553,8 @@ class MockTauriService {
     this.taoListeners.forEach(l => l(tao));
   }
 
-  private emitOpenClaw(payload: any) {
-    this.openclawListeners.forEach(l => l(payload));
+  private emitAsyncMessage(payload: any) {
+    this.asyncMessageListeners.forEach(l => l(payload));
   }
 
   // Debug / Manual Triggers
@@ -629,5 +648,5 @@ class MockTauriService {
   }
 }
 
-export const mockTauri = new MockTauriService();
+export const kernelEventBus = new KernelEventBus();
 

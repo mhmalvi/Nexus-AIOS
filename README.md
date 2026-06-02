@@ -125,9 +125,10 @@ automatically by `nexus-app/linux/install.sh` (alongside `nexus-cli`).
 
 ## 🔐 Security & Privacy
 
-Nexus is **Local-First**.
-*   **No Cloud Dependency**: All inference runs locally via Ollama.
-*   **Sandboxed Execution**: Agent tools run in isolated environments.
+Nexus is **Local-First** (cloud optional).
+*   **Local by default**: Inference runs locally via Ollama out of the box. Cloud providers (OpenAI, Anthropic, Groq, Cerebras, Mistral, Gemini, OpenRouter) are **optional** and only used when you add an API key and select them.
+*   **Trust by origin**: The local CLI/terminal/GUI is trusted (full power); inbound messaging and web content are treated as untrusted (restricted tools + approval).
+*   **Sandboxed Execution**: Agent tools run through a multi-layer safety supervisor (blacklist + AST audit + tool policy + HIL approval).
 *   **Audit Logging**: All agent actions are logged and user-verifiable.
 
 ## 📜 License

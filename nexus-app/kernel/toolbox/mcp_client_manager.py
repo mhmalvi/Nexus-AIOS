@@ -83,7 +83,9 @@ class MCPClientManager:
                             name=tool_name,
                             func=await make_tool_wrapper(),
                             description=f"[{name}] {tool.description or ''}",
-                            args_schema=tool.inputSchema
+                            args_schema=tool.inputSchema,
+                            source=name,
+                            external=True,  # MCP server = outside trust boundary (M3-6)
                         )
                         count += 1
                         

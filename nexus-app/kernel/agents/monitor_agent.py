@@ -6,7 +6,7 @@ Proactively watches CPU, Memory, Disk, and system processes
 import asyncio
 from typing import Dict, Any, Callable, Optional, List
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import psutil
@@ -128,7 +128,7 @@ class MonitorAgent:
             memory_percent=memory,
             disk_percent=disk,
             top_processes=processes,
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         )
         self._last_health = health
         return health
@@ -218,7 +218,7 @@ class MonitorAgent:
             message=message,
             value=value,
             threshold=threshold,
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         )
         
         if self.alert_callback:

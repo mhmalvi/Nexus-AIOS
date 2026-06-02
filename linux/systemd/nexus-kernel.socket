@@ -1,0 +1,27 @@
+[Unit]
+Description=Nexus AIOS Kernel Socket Activation
+Documentation=https://github.com/nexus-aios
+PartOf=nexus-kernel.service
+
+[Socket]
+# Unix socket for local IPC (high performance)
+ListenStream=/run/nexus/kernel.sock
+SocketMode=0660
+SocketUser=nexus
+SocketGroup=nexus
+
+# Optional: TCP socket for remote access (disabled by default)
+# ListenStream=127.0.0.1:7890
+
+# Accept connections immediately
+Accept=false
+
+# Socket options
+MaxConnections=64
+KeepAlive=true
+
+# Pass file descriptor to service
+FileDescriptorName=nexus-ipc
+
+[Install]
+WantedBy=sockets.target

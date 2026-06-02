@@ -61,18 +61,47 @@ class FileManager:
     def __init__(self, base_path: Optional[str] = None):
         self.base_path = Path(base_path) if base_path else Path.home()
     
-    def _validate_path(self, path: str) -> Path:
-        """Validate and resolve a path"""
-        
+    @staticmethod
+    def _is_at_or_under(resolved: Path, protected: str) -> bool:
+        """True if `resolved` IS the protected root or lives anywhere beneath it."""
+        try:
+            protected_path = Path(protected).resolve()
+        except Exception:
+            protected_path = Path(protected)
+        try:
+            # is_relative_to (py3.9+) covers both "equal to" and "under".
+            return resolved == protected_path or resolved.is_relative_to(protected_path)
+        except AttributeError:
+            # Fallback for older interpreters: compare normalized string prefixes
+            # on a path-separator boundary so that "/etc" does not match "/etcfoo".
+            r = os.path.normcase(str(resolved))
+            p = os.path.normcase(str(protected_path))
+            return r == p or r.startswith(p.rstrip("\\/") + os.sep)
+
+    def _validate_path(self, path: str, for_write: bool = False) -> Path:
+        """Validate and resolve a path.
+
+        Reads are permitted everywhere (only the bare protected root itself is
+        refused). Mutating operations (write/delete/move/copy-dest/create_dir)
+        are refused for the protected root AND anything beneath it, so that
+        e.g. ``C:\\Windows\\System32\\x`` or ``/etc/hosts`` cannot be clobbered
+        (F-NEW-1).
+        """
+
         resolved = Path(path).resolve()
-        
-        # Check against protected paths
+
         for protected in self.PROTECTED_PATHS:
-            if str(resolved).lower().startswith(protected.lower()):
-                # Allow reads but not the root itself
-                if str(resolved).lower() == protected.lower():
+            if self._is_at_or_under(resolved, protected):
+                if for_write:
+                    raise PermissionError(
+                        f"Cannot modify protected path: {resolved} (under {protected})"
+                    )
+                # Reads: only the bare protected root itself is refused.
+                if os.path.normcase(str(resolved)) == os.path.normcase(
+                    str(Path(protected).resolve() if os.path.exists(protected) else Path(protected))
+                ):
                     raise PermissionError(f"Cannot operate on protected path: {protected}")
-        
+
         return resolved
     
     async def read(
@@ -129,8 +158,8 @@ class FileManager:
         """Write content to file"""
         
         try:
-            resolved = self._validate_path(path)
-            
+            resolved = self._validate_path(path, for_write=True)
+
             if create_parents:
                 resolved.parent.mkdir(parents=True, exist_ok=True)
             
@@ -242,15 +271,15 @@ class FileManager:
         """Delete a file or directory"""
         
         try:
-            resolved = self._validate_path(path)
-            
+            resolved = self._validate_path(path, for_write=True)
+
             if not resolved.exists():
                 return FileResult(
                     success=False,
                     output=None,
                     error=f"Path not found: {path}"
                 )
-            
+
             if use_trash:
                 # Try to use send2trash if available
                 try:
@@ -289,16 +318,17 @@ class FileManager:
         """Move a file or directory"""
         
         try:
-            src = self._validate_path(source)
-            dst = self._validate_path(destination)
-            
+            # Moving mutates both source (removed) and destination (created).
+            src = self._validate_path(source, for_write=True)
+            dst = self._validate_path(destination, for_write=True)
+
             if not src.exists():
                 return FileResult(
                     success=False,
                     output=None,
                     error=f"Source not found: {source}"
                 )
-            
+
             shutil.move(str(src), str(dst))
             
             return FileResult(
@@ -322,16 +352,17 @@ class FileManager:
         """Copy a file or directory"""
         
         try:
+            # Copy reads from source but writes to destination.
             src = self._validate_path(source)
-            dst = self._validate_path(destination)
-            
+            dst = self._validate_path(destination, for_write=True)
+
             if not src.exists():
                 return FileResult(
                     success=False,
                     output=None,
                     error=f"Source not found: {source}"
                 )
-            
+
             if src.is_dir():
                 shutil.copytree(str(src), str(dst))
             else:
@@ -358,7 +389,7 @@ class FileManager:
         """Create a directory"""
         
         try:
-            resolved = self._validate_path(path)
+            resolved = self._validate_path(path, for_write=True)
             resolved.mkdir(parents=parents, exist_ok=True)
             
             return FileResult(

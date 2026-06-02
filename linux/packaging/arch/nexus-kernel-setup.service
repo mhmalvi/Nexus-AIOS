@@ -1,0 +1,16 @@
+[Unit]
+Description=Nexus AIOS Kernel Setup (Python Venv)
+After=network-online.target
+Wants=network-online.target
+Before=nexus-kernel.service
+
+[Service]
+Type=oneshot
+User=nexus
+Group=nexus
+ExecStart=/opt/nexus/bin/setup-kernel.sh
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -22,7 +22,7 @@ Features:
 - Message templates for platform-specific formatting
 - Heartbeat system for health monitoring
 
-Inspired by OpenClaw's auto-reply/chunk.ts (209 files)
+Inspired by open-source agent frameworks.
 """
 
 import asyncio
@@ -104,7 +104,7 @@ class Directive:
 
 
 # ---------------------------------------------------------------------------
-# Command Registry — 70+ slash commands (OpenClaw parity)
+# Command Registry — 70+ slash commands (broad command parity)
 # ---------------------------------------------------------------------------
 
 class CommandCategory(str, Enum):
@@ -885,3 +885,273 @@ class AutoReplyEngine:
             await asyncio.sleep(wait_s)
 
         self._last_send[key] = time.time()
+
+
+# ---------------------------------------------------------------------------
+# Command Executor — wires the slash-command registry to real kernel actions
+# (M3-1). Trust-aware: owner-only commands are refused to untrusted sessions,
+# and tool-bearing commands pass the caller's trust profile to the toolbox.
+# ---------------------------------------------------------------------------
+
+class CommandExecutor:
+    """Dispatches recognized slash commands to real kernel handlers.
+
+    A command with no `_cmd_<name>` method here returns a clear "recognized but
+    not yet wired" message naming the command — never a silent no-op.
+    """
+
+    def __init__(self, kernel, registry: Optional["CommandRegistry"] = None):
+        self.k = kernel
+        self.registry = registry or COMMAND_REGISTRY
+
+    async def execute(self, text: str, trust=None) -> Optional[str]:
+        """Execute a slash command. Returns the reply text, or None if `text`
+        is not a slash command (caller should then treat it as a normal query)."""
+        text = (text or "").strip()
+        if not text.startswith("/"):
+            return None
+        parts = text.split(None, 1)
+        cmd = self.registry.lookup(parts[0])
+        if not cmd:
+            return f"❓ Unknown command: {parts[0]}. Try /help."
+        args_text = parts[1].strip() if len(parts) > 1 else ""
+
+        is_owner = getattr(trust, "is_owner", True) if trust is not None else True
+        if cmd.owner_only and not is_owner:
+            return f"⛔ /{cmd.name} is owner-only and is not available to untrusted sessions."
+        if cmd.requires_args and not args_text:
+            return f"Usage: /{cmd.name} {cmd.usage}".strip()
+
+        method = getattr(self, f"_cmd_{cmd.name}", None)
+        if method is None:
+            return f"ℹ️ /{cmd.name} is recognized but not yet wired in this build. ({cmd.description})"
+        try:
+            result = method(args_text, trust)
+            if asyncio.iscoroutine(result):
+                result = await result
+            return result if isinstance(result, str) else str(result)
+        except Exception as e:
+            return f"⚠️ /{cmd.name} failed: {e}"
+
+    # ── helpers ────────────────────────────────────────────────────────
+    def _profile(self, trust) -> str:
+        return getattr(trust, "tool_profile", "full") if trust is not None else "full"
+
+    def _is_owner(self, trust) -> bool:
+        return getattr(trust, "is_owner", True) if trust is not None else True
+
+    # ── General ────────────────────────────────────────────────────────
+    def _cmd_help(self, args, trust):
+        cat = None
+        if args:
+            try:
+                cat = CommandCategory(args.strip().lower())
+            except ValueError:
+                cat = None
+        return self.registry.help_text(cat)
+
+    async def _cmd_status(self, args, trust):
+        k = self.k
+        model = getattr(getattr(k, "brain", None), "model", "?")
+        provider = (k.config or {}).get("ai_provider", "?") if getattr(k, "config", None) else "?"
+        mem = ""
+        try:
+            stats = k.memory.get_stats()
+            mem = f" | memory: {stats.get('total_count', 0)} items"
+        except Exception:
+            pass
+        return f"🟢 AETHER online | provider: {provider} | model: {model}{mem}"
+
+    def _cmd_version(self, args, trust):
+        return "AETHER kernel v0.4.0"
+
+    # ── Model ──────────────────────────────────────────────────────────
+    async def _cmd_models(self, args, trust):
+        try:
+            models = await self.k.brain.list_models()
+            if models:
+                return "Available models:\n" + "\n".join(f"  • {m}" for m in models)
+        except Exception:
+            pass
+        return f"Active model: {getattr(getattr(self.k, 'brain', None), 'model', '?')}"
+
+    async def _cmd_model(self, args, trust):
+        if not args:
+            return f"Active model: {getattr(self.k.brain, 'model', '?')}"
+        target = args.strip()
+        brain = getattr(self.k, "brain", None)
+        for meth in ("change_model", "set_model"):
+            fn = getattr(brain, meth, None)
+            if fn:
+                res = fn(target)
+                if asyncio.iscoroutine(res):
+                    await res
+                return f"✅ Model switched to {target}"
+        return f"⚠️ Model switching not available in this build (requested {target})."
+
+    # ── Memory ─────────────────────────────────────────────────────────
+    async def _cmd_memory(self, args, trust):
+        results = await self.k.memory.retrieve(query=args, limit=5)
+        if not results:
+            return "No matching memories."
+        lines = [f"🔎 Memory results for '{args}':"]
+        for r in results:
+            lines.append(f"  • ({r.get('score', 0):.2f}) {str(r.get('content',''))[:120]}")
+        return "\n".join(lines)
+
+    _cmd_search = _cmd_memory
+
+    async def _cmd_remember(self, args, trust):
+        await self.k.memory.store(content=args, tier="short_term", metadata={"source": "slash_command"})
+        return f"🧠 Stored: {args[:80]}"
+
+    async def _cmd_tiers(self, args, trust):
+        stats = self.k.memory.get_stats()
+        return (
+            "Memory tiers:\n"
+            f"  working:    {stats.get('working_count', 0)}\n"
+            f"  short_term: {stats.get('short_term_count', 0)}\n"
+            f"  long_term:  {stats.get('long_term_count', 0)}\n"
+            f"  total:      {stats.get('total_count', 0)}"
+        )
+
+    # ── Tools ──────────────────────────────────────────────────────────
+    def _cmd_tools(self, args, trust):
+        tools = self.k.toolbox.list_tools()
+        lines = ["🛠️ Tools:"]
+        for t in tools:
+            tag = " [external]" if t.get("external") else ""
+            lines.append(f"  • {t['name']}{tag} — {t.get('description','')}")
+        return "\n".join(lines)
+
+    async def _cmd_run(self, args, trust):
+        parts = args.split(None, 1)
+        tool = parts[0]
+        rest = parts[1] if len(parts) > 1 else ""
+        result = await self.k.toolbox.execute(
+            tool, args=[rest] if rest else [],
+            is_owner=self._is_owner(trust), profile=self._profile(trust),
+        )
+        return f"{'✅' if result.success else '❌'} {result.output if result.success else result.error}"
+
+    async def _cmd_shell(self, args, trust):
+        result = await self.k.toolbox.execute(
+            "shell", args=[args],
+            is_owner=self._is_owner(trust), profile=self._profile(trust),
+        )
+        out = result.output if result.success else result.error
+        return f"{'✅' if result.success else '❌'} {out}"
+
+    async def _cmd_browse(self, args, trust):
+        url = args.split(None, 1)[0]
+        result = await self.k.toolbox.execute(
+            "browse", args=[url],
+            is_owner=self._is_owner(trust), profile=self._profile(trust),
+        )
+        return f"{'✅' if result.success else '❌'} {str(result.output)[:500] if result.success else result.error}"
+
+    # ── Security ───────────────────────────────────────────────────────
+    def _cmd_security(self, args, trust):
+        sup = getattr(self.k, "supervisor", None)
+        if not sup:
+            return "Supervisor not available."
+        log = sup.get_audit_log(limit=10)
+        lines = ["🛡️ Security audit (recent):"]
+        for e in log:
+            lines.append(f"  • {e}")
+        return "\n".join(lines) if log else "🛡️ No recent security events."
+
+    _cmd_audit = _cmd_security
+
+    def _cmd_firewall(self, args, trust):
+        sup = getattr(self.k, "supervisor", None)
+        fw = getattr(sup, "firewall", None) if sup else None
+        if not fw:
+            return "Firewall not available."
+        stats = fw.get_stats()
+        return (
+            f"🔥 Firewall: {'enabled' if stats.get('enabled') else 'disabled'} | "
+            f"rules: {stats.get('rules_count')} | allowed: {stats.get('allowed_count')} | "
+            f"blocked: {stats.get('blocked_count')} | default: {stats.get('default_action')}"
+        )
+
+    def _cmd_permissions(self, args, trust):
+        sup = getattr(self.k, "supervisor", None)
+        tp = getattr(sup, "tool_policy", None) if sup else None
+        if not tp:
+            return "Tool policy not available."
+        profile = self._profile(trust)
+        allowed = tp.get_allowed_tools(profile=profile, is_owner=self._is_owner(trust))
+        return f"🔐 Allowed tools for profile '{profile}':\n  " + ", ".join(allowed)
+
+    # ── System ─────────────────────────────────────────────────────────
+    def _cmd_resources(self, args, trust):
+        s = self.k.system_stats.get_full_snapshot()
+        return (
+            f"CPU: {s['cpu'].get('percent', 0)}% | "
+            f"RAM: {s['memory'].get('percent', 0)}% | "
+            f"BAT: {s['battery'].get('percent', 'AC')}%"
+        )
+
+    _cmd_health = _cmd_resources
+
+    async def _cmd_read(self, args, trust):
+        result = await self.k.toolbox.execute(
+            "read_file", args=[args.strip()],
+            is_owner=self._is_owner(trust), profile=self._profile(trust),
+        )
+        if result.success:
+            text = str(result.output)
+            return text if len(text) <= 4000 else text[:4000] + "\n…(truncated)"
+        return f"❌ {result.error}"
+
+    async def _cmd_write(self, args, trust):
+        parts = args.split(None, 1)
+        if len(parts) < 2:
+            return "Usage: /write <file> <content>"
+        path, content = parts[0], parts[1]
+        result = await self.k.toolbox.execute(
+            "write_file", args=[path, content],
+            is_owner=self._is_owner(trust), profile=self._profile(trust),
+        )
+        return f"{'✅ wrote ' + str(result.output) if result.success else '❌ ' + str(result.error)}"
+
+    # ── Config ─────────────────────────────────────────────────────────
+    async def _cmd_provider(self, args, trust):
+        if not self._is_owner(trust):
+            return "⛔ Switching provider is owner-only."
+        provider = args.strip().lower()
+        cfg = getattr(self.k, "config", {})
+        cfg["ai_provider"] = provider
+        rc = getattr(self.k, "runtime_config", None)
+        if rc:
+            await rc.set("ai_provider", provider)
+        try:
+            if self.k.brain and getattr(self.k.brain, "reload_config", None):
+                await self.k.brain.reload_config()
+        except Exception:
+            pass
+        return f"✅ Provider set to {provider}"
+
+    async def _cmd_temperature(self, args, trust):
+        try:
+            temp = float(args.strip())
+        except ValueError:
+            return "Usage: /temperature <0.0-2.0>"
+        temp = max(0.0, min(2.0, temp))
+        cfg = getattr(self.k, "config", {})
+        cfg["temperature"] = temp
+        rc = getattr(self.k, "runtime_config", None)
+        if rc:
+            await rc.set("temperature", temp)
+        return f"✅ Temperature set to {temp}"
+
+    def _cmd_config(self, args, trust):
+        cfg = getattr(self.k, "config", {}) or {}
+        if not args:
+            keys = ", ".join(sorted(k for k in cfg.keys() if "key" not in k.lower()))
+            return f"Config keys: {keys}\nUse /config <key> to view a value."
+        key = args.split(None, 1)[0]
+        if "key" in key.lower() or "api" in key.lower():
+            return "🔒 Secret values are not displayed."
+        return f"{key} = {cfg.get(key, '(unset)')}"

@@ -1,5 +1,5 @@
 
-import { mockTauri } from "./mockTauri";
+import { kernelEventBus } from "./kernelEventBus";
 import { ActionRequest } from "../types";
 
 // Re-using the same interface class but routing to Tauri
@@ -39,11 +39,11 @@ export class AIService {
       }
 
       // 2. Setup new listeners
-      const unsubChunk = mockTauri.subscribeChunk((chunk) => {
+      const unsubChunk = kernelEventBus.subscribeChunk((chunk) => {
         onChunk(chunk);
       });
 
-      const unsubResponse = mockTauri.subscribeResponse((response) => {
+      const unsubResponse = kernelEventBus.subscribeResponse((response) => {
         if (response.message_type === 'response' && response.data?.response) {
           // Ensure final full text is consistent if needed
         }
@@ -56,13 +56,13 @@ export class AIService {
         }
 
         // Handle Action/Tool Requests included in response or as separate events
-        // Note: mockTauri handles 'tao_event' separately, but if we get a direct action request:
+        // Note: kernelEventBus handles 'tao_event' separately, but if we get a direct action request:
         if (response.message_type === 'action_request' && onAction) {
           onAction(response.data);
         }
       });
 
-      const unsubHIL = mockTauri.subscribeHIL((action) => {
+      const unsubHIL = kernelEventBus.subscribeHIL((action) => {
         if (onAction) onAction(action);
       });
 
@@ -74,7 +74,7 @@ export class AIService {
       };
 
       // 3. Send to Backend
-      const response = await mockTauri.sendQuery(message) as any;
+      const response = await kernelEventBus.sendQuery(message) as any;
 
       if (!response?.success && onChunk) {
         // Graceful fallback message

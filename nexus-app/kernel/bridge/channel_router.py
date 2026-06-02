@@ -2,12 +2,12 @@
 Channel Router — Multi-Platform Messaging Hub
 
 Routes messages between Nexus and external platforms
-(WhatsApp, Telegram, Discord, Email) via the OpenClaw Gateway.
+(WhatsApp, Telegram, Discord, Email) via the messaging gateway.
 
 Responsibilities:
 - Manage channel registrations and status
 - Route inbound messages to kernel for AI processing
-- Dispatch outbound messages to correct channel via OpenClaw
+- Dispatch outbound messages to correct channel via the gateway
 - Track message history and delivery status
 - Support message templates and formatting per channel
 """
@@ -87,11 +87,11 @@ class ChannelRouter:
     """
     Routes messages between Nexus kernel and external messaging platforms.
 
-    Works with OpenClawClient as the transport layer.
+    Works with the transport client as the transport layer.
 
     Usage:
         router = ChannelRouter()
-        router.set_openclaw_client(openclaw_client)
+        router.set_transport(transport_client)
         router.set_kernel_callback(kernel_process_fn)
 
         # Enable channels
@@ -103,7 +103,7 @@ class ChannelRouter:
     """
 
     def __init__(self):
-        self._openclaw = None
+        self._transport = None
         self._kernel_callback: Optional[Callable[[ChannelMessage], Awaitable[str]]] = None
 
         # Channel registry
@@ -146,13 +146,13 @@ class ChannelRouter:
     # Setup
     # ------------------------------------------------------------------
 
-    def set_openclaw_client(self, client):
-        """Attach the OpenClaw WebSocket transport."""
-        self._openclaw = client
+    def set_transport(self, client):
+        """Attach the messaging transport."""
+        self._transport = client
         # Register our inbound handler
         if client:
             client.set_callback(self._handle_inbound)
-            logger.info("✅ ChannelRouter connected to OpenClaw client")
+            logger.info("✅ ChannelRouter connected to messaging transport")
 
     def set_kernel_callback(self, callback: Callable[[ChannelMessage], Awaitable[str]]):
         """Set the callback for processing inbound messages through the AI."""
@@ -215,7 +215,7 @@ class ChannelRouter:
 
     async def _handle_inbound(self, data: dict):
         """
-        Handle an inbound message from OpenClaw Gateway.
+        Handle an inbound message from messaging gateway.
 
         Expected format from gateway:
         {
@@ -297,8 +297,8 @@ class ChannelRouter:
             logger.warning(f"Cannot send: channel {channel} is disabled")
             return False
 
-        if not self._openclaw:
-            logger.error("Cannot send: OpenClaw client not connected")
+        if not self._transport:
+            logger.error("Cannot send: messaging transport not connected")
             return False
 
         # Create message record
@@ -310,8 +310,8 @@ class ChannelRouter:
         )
 
         try:
-            # Dispatch via OpenClaw
-            await self._openclaw.send_message(channel, recipient, text)
+            # Dispatch via the gateway
+            await self._transport.send_message(channel, recipient, text)
             msg.status = DeliveryStatus.SENT.value
             ch_config.message_count += 1
             ch_config.last_activity = time.time()
@@ -363,6 +363,15 @@ class ChannelRouter:
             self._templates[channel] = {}
         self._templates[channel][template_name] = text
 
+    def _is_gateway_connected(self) -> bool:
+        """Connection check that works for any transport (any provider)."""
+        if self._transport is None:
+            return False
+        is_conn = getattr(self._transport, "is_connected", None)
+        if callable(is_conn):
+            return bool(is_conn())
+        return getattr(self._transport, "ws", None) is not None
+
     def get_stats(self) -> Dict[str, Any]:
         """Get overall messaging statistics."""
         total_messages = sum(ch.message_count for ch in self._channels.values())
@@ -374,6 +383,6 @@ class ChannelRouter:
             "active_channels": active_channels,
             "connected_channels": connected_channels,
             "history_size": len(self._history),
-            "gateway_connected": self._openclaw is not None and self._openclaw.ws is not None,
+            "gateway_connected": self._is_gateway_connected(),
             "channels": self.get_channel_status(),
         }

@@ -1,0 +1,167 @@
+# Maintainer: Nexus Team <team@nexus-aios.org>
+pkgbase=nexus-aios
+pkgname=('nexus-core' 'nexus-kernel' 'nexus-common')
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Hybrid AI Operating System - Local-first autonomous assistant"
+arch=('x86_64')
+url="https://github.com/nexus-aios/nexus"
+license=('MIT')
+makedepends=('python' 'python-virtualenv' 'git' 'base-devel')
+source=(
+    "nexus-core.service"
+    "nexus-kernel.service"
+    "nexus.sysusers"
+    "nexus.tmpfiles"
+    "nexus.install"
+    "setup-kernel.sh"
+    "nexus-kernel-setup.service"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+# Resolve project root relative to this PKGBUILD
+_nexus_root="${startdir}/../../../.."
+_kernel_dir="${_nexus_root}/nexus-app/kernel"
+
+package_nexus-common() {
+    pkgdesc="Common files for Nexus AIOS (users, logs, directories)"
+    depends=('systemd')
+    install='nexus.install'
+
+    cd "$srcdir"
+    
+    # Install sysusers config
+    install -Dm644 nexus.sysusers "$pkgdir/usr/lib/sysusers.d/nexus.conf"
+    
+    # Install tmpfiles config
+    install -Dm644 nexus.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/nexus.conf"
+    
+    # Create directory structure
+    install -dm750 "$pkgdir/var/lib/nexus"
+    install -dm750 "$pkgdir/var/lib/nexus/config"
+    install -dm755 "$pkgdir/var/lib/nexus/models"
+    install -dm755 "$pkgdir/var/log/nexus"
+    install -dm750 "$pkgdir/run/nexus"
+    install -dm755 "$pkgdir/opt/nexus"
+    install -dm755 "$pkgdir/opt/nexus/bin"
+    install -dm755 "$pkgdir/opt/nexus/app"
+    install -dm755 "$pkgdir/opt/nexus/data"
+}
+
+package_nexus-core() {
+    pkgdesc="Nexus AIOS Orchestrator (Python — manages kernel + REST API)"
+    depends=('nexus-common' 'nexus-kernel' 'dbus' 'python>=3.10' 'python-aiohttp')
+    optdepends=('ollama: Local LLM runtime (required for AI)')
+
+    cd "$srcdir"
+
+    # Install the Linux orchestrator
+    install -dm755 "$pkgdir/opt/nexus/app/kernel/linux"
+    install -Dm755 "${_kernel_dir}/linux/nexus_orchestrator.py" \
+        "$pkgdir/opt/nexus/app/kernel/linux/nexus_orchestrator.py"
+    
+    # Create nexus-core wrapper script
+    install -dm755 "$pkgdir/opt/nexus/bin"
+    cat > "$pkgdir/opt/nexus/bin/nexus-core" << 'EOF'
+#!/bin/bash
+export PYTHONPATH=/opt/nexus/app
+export NEXUS_HOME=/opt/nexus
+export NEXUS_DATA=/var/lib/nexus
+exec /opt/nexus/.venv/bin/python /opt/nexus/app/kernel/linux/nexus_orchestrator.py "$@"
+EOF
+    chmod 755 "$pkgdir/opt/nexus/bin/nexus-core"
+
+    # Create nexus-cli wrapper
+    cat > "$pkgdir/opt/nexus/bin/nexus-cli" << 'EOF'
+#!/bin/bash
+export PYTHONPATH=/opt/nexus/app
+export NEXUS_HOME=/opt/nexus
+exec /opt/nexus/.venv/bin/python /opt/nexus/app/kernel/linux/nexus_orchestrator.py --no-api "$@"
+EOF
+    chmod 755 "$pkgdir/opt/nexus/bin/nexus-cli"
+    
+    # Symlinks to /usr/bin
+    install -dm755 "$pkgdir/usr/bin"
+    ln -s /opt/nexus/bin/nexus-core "$pkgdir/usr/bin/nexus-core"
+    ln -s /opt/nexus/bin/nexus-cli "$pkgdir/usr/bin/nexus-cli"
+    
+    # Install service file
+    install -Dm644 nexus-core.service "$pkgdir/usr/lib/systemd/system/nexus-core.service"
+
+    # Install D-Bus policy
+    install -dm755 "$pkgdir/usr/share/dbus-1/system.d"
+    cat > "$pkgdir/usr/share/dbus-1/system.d/org.nexus.Agent.conf" << 'DBUS'
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy user="nexus">
+    <allow own="org.nexus.Agent"/>
+    <allow own="org.nexus.Memory"/>
+  </policy>
+  <policy context="default">
+    <allow send_destination="org.nexus.Agent"/>
+    <allow send_destination="org.nexus.Memory"/>
+  </policy>
+</busconfig>
+DBUS
+}
+
+package_nexus-kernel() {
+    pkgdesc="Nexus AIOS Kernel (Python AI Reasoning Engine)"
+    depends=('nexus-common' 'python>=3.10' 'python-pip' 'python-virtualenv')
+    optdepends=(
+        'cuda: NVIDIA GPU support'
+        'intel-media-driver: Intel GPU support'
+        'ollama: Local LLM runtime'
+        'nexus-core: Orchestrator with REST API'
+    )
+
+    # Copy python source code
+    install -dm755 "$pkgdir/opt/nexus/app/kernel"
+    cp -r "${_kernel_dir}/"* "$pkgdir/opt/nexus/app/kernel/"
+    
+    # Remove pycache and test files from package
+    find "$pkgdir/opt/nexus/app/kernel" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    find "$pkgdir/opt/nexus/app/kernel" -name "*.pyc" -delete 2>/dev/null || true
+
+    # Create nexus-kernel wrapper
+    install -dm755 "$pkgdir/opt/nexus/bin"
+    cat > "$pkgdir/opt/nexus/bin/nexus-kernel" << 'EOF'
+#!/bin/bash
+export PYTHONPATH=/opt/nexus/app
+export NEXUS_HOME=/opt/nexus
+export NEXUS_DATA=/var/lib/nexus
+exec /opt/nexus/.venv/bin/python /opt/nexus/app/kernel/main.py "$@"
+EOF
+    chmod 755 "$pkgdir/opt/nexus/bin/nexus-kernel"
+
+    # Create nexus-setup (first-boot venv bootstrap)
+    cat > "$pkgdir/opt/nexus/bin/nexus-setup" << 'EOF'
+#!/bin/bash
+set -e
+VENV_DIR="/opt/nexus/.venv"
+KERNEL_DIR="/opt/nexus/app/kernel"
+if [ ! -d "${VENV_DIR}" ]; then
+    echo "🔧 Creating Python virtual environment..."
+    python -m venv "${VENV_DIR}"
+    "${VENV_DIR}/bin/pip" install --quiet --upgrade pip
+    if [ -f "${KERNEL_DIR}/requirements.lock.txt" ]; then
+        "${VENV_DIR}/bin/pip" install --quiet -r "${KERNEL_DIR}/requirements.lock.txt"
+    elif [ -f "${KERNEL_DIR}/requirements.txt" ]; then
+        "${VENV_DIR}/bin/pip" install --quiet -r "${KERNEL_DIR}/requirements.txt"
+    fi
+    echo "✅ Python environment ready"
+fi
+EOF
+    chmod 755 "$pkgdir/opt/nexus/bin/nexus-setup"
+    
+    # Symlinks to /usr/bin
+    install -dm755 "$pkgdir/usr/bin"
+    ln -s /opt/nexus/bin/nexus-kernel "$pkgdir/usr/bin/nexus-kernel"
+    ln -s /opt/nexus/bin/nexus-setup "$pkgdir/usr/bin/nexus-setup"
+    
+    # Install service files
+    install -Dm644 nexus-kernel.service "$pkgdir/usr/lib/systemd/system/nexus-kernel.service"
+    install -Dm644 nexus-kernel-setup.service "$pkgdir/usr/lib/systemd/system/nexus-kernel-setup.service"
+    install -Dm755 setup-kernel.sh "$pkgdir/opt/nexus/bin/setup-kernel-legacy.sh"
+}
