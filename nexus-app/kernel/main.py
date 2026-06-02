@@ -746,6 +746,9 @@ class AetherKernel:
             elif message.message_type == "manage_memory":
                 return await self._handle_manage_memory(message)
 
+            elif message.message_type == "delete_memory":
+                return await self._handle_delete_memory(message)
+
             else:
                 return KernelResponse(
                     id=message.id,
@@ -1004,9 +1007,6 @@ class AetherKernel:
                         "chunk": chunk
                     }
                 }), flush=True)
-                
-                if message.payload.get("reply_audio", False) and self.voice_pipeline:
-                    pass 
 
         except Exception as e:
             return KernelResponse(
@@ -2377,10 +2377,62 @@ class AetherKernel:
                 error=f"Memory query failed: {e}"
             )
             
+    async def _handle_delete_memory(self, message: KernelMessage) -> KernelResponse:
+        """Delete a single memory entry by ID (backs the UI 'Forget' action)."""
+        entry_id = message.payload.get("id", "")
+        if not entry_id:
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="error",
+                error="Missing 'id' parameter for delete_memory",
+            )
+        try:
+            deleted = await self.memory.delete_entry(entry_id)
+            return KernelResponse(
+                id=message.id,
+                success=True,
+                message_type="memory_deleted",
+                data={"id": entry_id, "deleted": deleted},
+            )
+        except Exception as e:
+            return KernelResponse(
+                id=message.id,
+                success=False,
+                message_type="error",
+                error=f"Failed to delete memory '{entry_id}': {e}",
+            )
+
     async def _handle_manage_memory(self, message: KernelMessage) -> KernelResponse:
         """Handle memory management operations (clear tier, delete entry)"""
         action = message.payload.get("action", "")
         tier = message.payload.get("tier", "")
+
+        # Delete a single entry by id (alternative to the delete_memory message).
+        if action == "delete":
+            entry_id = message.payload.get("id", "")
+            if not entry_id:
+                return KernelResponse(
+                    id=message.id,
+                    success=False,
+                    message_type="error",
+                    error="Missing 'id' parameter for manage_memory delete",
+                )
+            try:
+                deleted = await self.memory.delete_entry(entry_id)
+                return KernelResponse(
+                    id=message.id,
+                    success=True,
+                    message_type="memory_deleted",
+                    data={"id": entry_id, "deleted": deleted},
+                )
+            except Exception as e:
+                return KernelResponse(
+                    id=message.id,
+                    success=False,
+                    message_type="error",
+                    error=f"Failed to delete memory '{entry_id}': {e}",
+                )
 
         if action == "clear" and tier:
             try:

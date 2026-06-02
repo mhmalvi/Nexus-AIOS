@@ -106,6 +106,8 @@ export interface SystemInfo {
     cpu_count: number;
     total_memory: number;
     used_memory: number;
+    total_disk?: number;
+    used_disk?: number;
 }
 
 export interface AuditLogEntry {
@@ -316,7 +318,9 @@ function getMockResponse(cmd: string, args?: Record<string, unknown>): any {
                 uptime: 12500, // seconds
                 cpu_count: 12,
                 total_memory: 32000000000,
-                used_memory: 16000000000
+                used_memory: 16000000000,
+                total_disk: 1000000000000,
+                used_disk: 450000000000
             };
 
         case 'get_platform_info':

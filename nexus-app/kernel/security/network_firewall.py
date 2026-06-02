@@ -227,8 +227,10 @@ class NetworkFirewall:
                     "url": url, "agent": agent_id, "verdict": verdict.value,
                     "rule": rule_id, "time": time.time(), "method": method,
                 }) + "\n")
-        except Exception:
-            pass
+        except Exception as e:
+            # Audit-log persistence is best-effort, but a silent failure means
+            # the on-disk network trail is incomplete — surface it at debug.
+            logger.debug("Failed to append network audit log to %s: %s", self._log_path, e)
 
     def _save_rules(self):
         try:

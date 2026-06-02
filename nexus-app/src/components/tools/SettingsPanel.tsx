@@ -26,7 +26,9 @@ export function SettingsPanel() {
                     kernel: `Nexus-v${info.kernel_version || 'Generic'}`,
                     uptime: `${Math.floor((info.uptime || 0) / 3600)}h ${Math.floor(((info.uptime || 0) % 3600) / 60)}m`,
                     memory: `${Math.round(((info.used_memory || 0) / (info.total_memory || 1)) * 100)}%`,
-                    storage: '45%' // Mock storage for now
+                    storage: info.total_disk
+                        ? `${Math.round(((info.used_disk || 0) / info.total_disk) * 100)}%`
+                        : 'N/A',
                 });
             };
             fetchInfo();

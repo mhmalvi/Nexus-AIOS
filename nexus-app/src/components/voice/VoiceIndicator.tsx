@@ -24,6 +24,7 @@ export function VoiceIndicator({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const dataArrayRef = useRef<Uint8Array | null>(null);
   const [isRealAudio, setIsRealAudio] = useState(false);
+  const [micDenied, setMicDenied] = useState(false);
 
   // Initialize Web Audio API when listening starts
   useEffect(() => {
@@ -39,6 +40,7 @@ export function VoiceIndicator({
         audioContextRef.current = null;
       }
       setIsRealAudio(false);
+      setMicDenied(false);
       return;
     }
 
@@ -63,11 +65,16 @@ export function VoiceIndicator({
         dataArrayRef.current = new Uint8Array(bufferLength);
 
         setIsRealAudio(true);
+        setMicDenied(false);
         startRealVisualization();
       } catch (err) {
-        console.warn('🎤 Microphone access denied, using mock visualization:', err);
+        // Microphone unavailable/denied. Do NOT fake an active waveform — that
+        // would imply we are capturing audio when we are not. Show a flat idle
+        // level and flag the denied state so the UI can label it honestly.
+        console.warn('🎤 Microphone unavailable — showing idle (no fake waveform):', err);
         setIsRealAudio(false);
-        startMockVisualization();
+        setMicDenied(true);
+        setLevels(new Array(20).fill(6));
       }
     };
 
@@ -93,29 +100,6 @@ export function VoiceIndicator({
         }
 
         setLevels(newLevels);
-        animationRef.current = requestAnimationFrame(updateLevels);
-      };
-
-      updateLevels();
-    };
-
-    const startMockVisualization = () => {
-      const updateLevels = () => {
-        setLevels(prev => prev.map((current, i) => {
-          // Base randomness + sine wave for organic feel
-          const baseNoise = Math.random() * 50;
-          const wave = Math.sin(Date.now() / 200 + i * 0.5) * 30;
-
-          // Apply sensitivity multiplier
-          let target = (30 + wave + baseNoise) * settings.sensitivity;
-          target = Math.max(5, Math.min(100, target));
-
-          // Apply smoothing (responsiveness)
-          const smoothing = Math.max(0.1, settings.responsiveness);
-          const diff = target - current;
-
-          return current + (diff * smoothing);
-        }));
         animationRef.current = requestAnimationFrame(updateLevels);
       };
 
@@ -214,8 +198,10 @@ export function VoiceIndicator({
             {/* Technical Metadata */}
             <div className="pl-6 border-l border-white/10 flex flex-col justify-center min-w-[100px] gap-0.5">
               <div className="flex items-center gap-2 mb-0.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_red]" />
-                <span className="text-[10px] font-bold text-foreground/90 uppercase tracking-[0.2em]">Live Input</span>
+                <div className={`w-1.5 h-1.5 rounded-full ${micDenied ? 'bg-yellow-500' : 'bg-red-500 animate-pulse shadow-[0_0_8px_red]'}`} />
+                <span className="text-[10px] font-bold text-foreground/90 uppercase tracking-[0.2em]">
+                  {micDenied ? 'Mic Unavailable' : 'Live Input'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground font-mono">
                 <Radio className="w-3 h-3" />

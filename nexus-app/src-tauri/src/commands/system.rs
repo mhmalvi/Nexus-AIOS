@@ -12,6 +12,8 @@ pub struct SystemInfo {
     pub cpu_count: usize,
     pub total_memory: u64,
     pub used_memory: u64,
+    pub total_disk: u64,
+    pub used_disk: u64,
     pub uptime: u64,
     pub home_dir: String,
 }
@@ -37,6 +39,17 @@ pub fn get_system_info() -> Result<SystemInfo, String> {
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| "Unknown".to_string());
 
+    // Real disk usage (summed across mounted physical disks) so the UI can show
+    // an honest storage figure instead of a hardcoded placeholder.
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let mut total_disk: u64 = 0;
+    let mut available_disk: u64 = 0;
+    for disk in disks.list() {
+        total_disk = total_disk.saturating_add(disk.total_space());
+        available_disk = available_disk.saturating_add(disk.available_space());
+    }
+    let used_disk = total_disk.saturating_sub(available_disk);
+
     Ok(SystemInfo {
         os_name: System::name().unwrap_or_else(|| "Unknown".to_string()),
         kernel_version: System::kernel_version().unwrap_or_else(|| "Unknown".to_string()),
@@ -45,6 +58,8 @@ pub fn get_system_info() -> Result<SystemInfo, String> {
         cpu_count: sys.cpus().len(),
         total_memory: sys.total_memory(),
         used_memory: sys.used_memory(),
+        total_disk,
+        used_disk,
         uptime: System::uptime(),
         home_dir,
     })

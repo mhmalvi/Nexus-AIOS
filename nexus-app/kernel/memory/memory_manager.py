@@ -283,6 +283,34 @@ class MemoryManager:
             table_name = f"{tier}_memory"
             return await self.db_store.clear_table(table_name)
     
+    async def delete_entry(self, entry_id: str) -> bool:
+        """Delete a single memory entry by ID across all tiers.
+
+        Working memory is an in-process list; the short/long-term tiers are
+        persistent LanceDB tables. We attempt removal from each location and
+        report success if the entry was found and removed anywhere.
+        """
+        if not entry_id:
+            return False
+
+        deleted = False
+
+        # 1. Working (volatile) tier — drop any matching in-memory entries.
+        before = len(self.working_memory)
+        self.working_memory = [e for e in self.working_memory if e.id != entry_id]
+        if len(self.working_memory) != before:
+            deleted = True
+
+        # 2. Persistent tiers — best-effort delete by id from each table.
+        for table_name in ("short_term_memory", "long_term_memory"):
+            try:
+                if await self.db_store.delete(entry_id, table_name):
+                    deleted = True
+            except Exception as e:
+                logger.warning("delete_entry: %s delete failed: %s", table_name, e)
+
+        return deleted
+
     async def cleanup_short_term(self) -> int:
         """Remove expired short-term memories"""
         
