@@ -1,4 +1,6 @@
 <!-- repo-card -->
+![Nexus-AIOS](docs/assets/screenshot.png)
+
 ![Nexus-AIOS](docs/assets/social-card.png)
 
 ![Nexus-AIOS — architecture](docs/assets/architecture.png)
