@@ -1,6 +1,8 @@
 <!-- repo-card -->
 ![Nexus-AIOS](docs/assets/social-card.png)
 
+![Nexus-AIOS — architecture](docs/assets/architecture.png)
+
 ## Run Locally
 
 **Prerequisites:**  Node.js
